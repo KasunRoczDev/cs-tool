@@ -1,0 +1,20 @@
+{
+  "name": "monitor-agent",
+  "version": "1.0.0",
+  "description": "Lightweight Ubuntu monitoring agent — collects system + security telemetry and streams it to the central platform.",
+  "license": "MIT",
+  "bin": {
+    "monitor-agent": "src/index.js"
+  },
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0"
+  }
+}

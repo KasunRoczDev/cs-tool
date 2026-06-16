@@ -1,0 +1,29 @@
+# Monitor Agent configuration
+# Installed to /etc/monitor-agent/agent.yaml
+
+# Central platform base URL (HTTPS required in production)
+server_url: https://monitor.example.com
+
+# Per-server API key issued during onboarding (POST /api/v1/servers)
+api_key: REPLACE_WITH_YOUR_API_KEY
+
+# Metric collection interval (seconds)
+metrics_interval: 15
+
+# How often to flush buffered data to the server (seconds)
+send_interval: 30
+
+# Feature toggles
+metrics: true
+security_logs: true
+
+# TLS verification — keep true in production. Set false only for self-signed lab certs.
+tls_verify: true
+
+# Offline buffer (newline-delimited JSON) used when the server is unreachable
+buffer_file: /var/lib/monitor-agent/buffer.ndjson
+buffer_max_items: 50000
+
+# Security log sources (auto-detected; override if non-standard)
+auth_log: /var/log/auth.log
+use_journald: true   # prefer `journalctl` when available

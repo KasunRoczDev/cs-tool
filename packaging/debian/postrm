@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+systemctl daemon-reload || true
+
+# On purge, remove state and user
+if [ "$1" = "purge" ]; then
+  rm -rf /var/lib/monitor-agent
+  if getent passwd monitor-agent >/dev/null; then
+    deluser --system monitor-agent || true
+  fi
+fi
+
+exit 0

@@ -1,0 +1,9 @@
+#!/bin/sh
+set -e
+
+if [ -d /run/systemd/system ]; then
+  systemctl stop monitor-agent.service || true
+  systemctl disable monitor-agent.service || true
+fi
+
+exit 0

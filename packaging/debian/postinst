@@ -1,0 +1,35 @@
+#!/bin/sh
+set -e
+
+# Create dedicated system user
+if ! getent passwd monitor-agent >/dev/null; then
+  adduser --system --group --no-create-home --home /var/lib/monitor-agent \
+          --shell /usr/sbin/nologin monitor-agent
+fi
+
+# State directory for offline buffer
+mkdir -p /var/lib/monitor-agent
+chown -R monitor-agent:monitor-agent /var/lib/monitor-agent
+chmod 750 /var/lib/monitor-agent
+
+# Config dir perms
+chown -R root:monitor-agent /etc/monitor-agent
+chmod 750 /etc/monitor-agent
+chmod 640 /etc/monitor-agent/agent.yaml || true
+
+# Install node deps into the app dir (js-yaml)
+if [ -f /usr/lib/monitor-agent/package.json ]; then
+  ( cd /usr/lib/monitor-agent && npm install --omit=dev --no-audit --no-fund >/dev/null 2>&1 || true )
+fi
+
+systemctl daemon-reload || true
+systemctl enable monitor-agent.service || true
+
+echo "------------------------------------------------------------"
+echo " monitor-agent installed."
+echo " 1. Edit /etc/monitor-agent/agent.yaml (set server_url + api_key)"
+echo " 2. sudo systemctl start monitor-agent"
+echo " 3. journalctl -u monitor-agent -f"
+echo "------------------------------------------------------------"
+
+exit 0

@@ -1,0 +1,28 @@
+[Unit]
+Description=Monitor Agent - system & security telemetry collector
+Documentation=https://monitor.example.com/docs
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=monitor-agent
+Group=monitor-agent
+ExecStart=/usr/bin/node /usr/lib/monitor-agent/src/index.js
+Environment=MONITOR_CONFIG=/etc/monitor-agent/agent.yaml
+Restart=always
+RestartSec=5
+# Resource guardrails (SRS constraint: < ~5% CPU)
+CPUQuota=15%
+MemoryMax=128M
+# Hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/monitor-agent
+PrivateTmp=true
+# Allow reading auth logs / journal
+SupplementaryGroups=adm systemd-journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,12 @@
+Package: monitor-agent
+Version: 1.0.0
+Section: admin
+Priority: optional
+Architecture: all
+Depends: nodejs (>= 18.0.0)
+Maintainer: Monitoring Platform <ops@example.com>
+Description: Cybersecurity & server metrics monitoring agent
+ Lightweight Node.js agent that collects CPU, memory, disk and network
+ metrics plus SSH/sudo/firewall security events and securely streams them
+ to the central monitoring platform. Runs as a systemd service with
+ offline buffering and automatic retry.
