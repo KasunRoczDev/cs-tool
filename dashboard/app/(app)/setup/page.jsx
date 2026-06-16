@@ -14,34 +14,28 @@ const steps = [
         <ul>
           <li>Ubuntu 20.04 LTS or later</li>
           <li>sudo privileges</li>
-          <li>curl or wget installed</li>
           <li>Internet connectivity to backend server</li>
+          <li>Backend server address (e.g., http://YOUR_BACKEND_HOST:4000)</li>
+          <li>API Key from monitoring platform</li>
         </ul>
-        <h4>Recommended:</h4>
+        <h4>System Requirements:</h4>
         <ul>
-          <li>2+ CPU cores</li>
-          <li>2GB+ RAM</li>
-          <li>50MB disk space</li>
+          <li>2+ CPU cores (limited to 15% per systemd config)</li>
+          <li>256MB+ RAM (limited to 128MB per systemd config)</li>
+          <li>100MB disk space in /var/lib/</li>
         </ul>
       </div>
     ),
   },
   {
     id: 2,
-    title: 'Update System',
-    description: 'Update package lists and install dependencies',
+    title: 'Update System & Install Node.js',
+    description: 'Update packages and install Node.js runtime',
     code: `# Update package lists
 sudo apt update
 sudo apt upgrade -y
 
-# Install required packages
-sudo apt install -y curl wget git build-essential`,
-  },
-  {
-    id: 3,
-    title: 'Install Node.js',
-    description: 'Install Node.js runtime (required for agent)',
-    code: `# Install Node.js (LTS version)
+# Install Node.js (LTS version)
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 
@@ -50,149 +44,194 @@ node --version
 npm --version`,
   },
   {
-    id: 4,
-    title: 'Create Agent Directory',
-    description: 'Create a dedicated directory for the agent',
-    code: `# Create directory structure
-sudo mkdir -p /opt/monitoring-agent
-sudo chown $USER:$USER /opt/monitoring-agent
-cd /opt/monitoring-agent
+    id: 3,
+    title: 'Create System User',
+    description: 'Create dedicated system user for the monitoring agent',
+    code: `# Create system user (no login, no home directory)
+sudo useradd --system --no-create-home --shell /usr/sbin/nologin monitor-agent
 
-# Create necessary subdirectories
-mkdir -p logs config data scripts`,
+# Create agent directories
+sudo mkdir -p /opt/monitor-agent /var/lib/monitor-agent
+
+# Set proper permissions and ownership
+sudo chown -R monitor-agent:monitor-agent /var/lib/monitor-agent
+sudo chmod 700 /var/lib/monitor-agent
+
+# Verify user was created
+id monitor-agent`,
+  },
+  {
+    id: 4,
+    title: 'Prepare Build Environment',
+    description: 'Setup packaging and build directory',
+    code: `# Navigate to build directory
+cd /var/www/
+
+# Create packaging directory
+mkdir packaging
+cd packaging
+
+# Make scripts executable
+chmod +x build-deb.sh debian/postinst debian/prerm debian/postrm
+
+# Verify structure
+ls -la`,
   },
   {
     id: 5,
-    title: 'Clone Agent Repository',
-    description: 'Clone the monitoring agent from repository',
-    code: `# Navigate to agent directory
-cd /opt/monitoring-agent
+    title: 'Create Agent Script',
+    description: 'Create the main monitor-agent.js script',
+    code: `# Create agent directory
+sudo mkdir -p /opt/monitor-agent
 
-# Clone the repository (replace with your repo URL)
-git clone https://github.com/your-org/monitoring-agent.git .
+# Create the monitor-agent.js file
+sudo nano /opt/monitor-agent/monitor-agent.js
 
-# Install dependencies
-npm install --production`,
+# Paste your monitoring agent code here
+# The script should:
+# - Collect system metrics (CPU, memory, disk, network)
+# - Collect security events
+# - Send data to backend via MONITOR_SERVER_URL
+# - Handle errors gracefully`,
   },
   {
     id: 6,
-    title: 'Configuration',
-    description: 'Configure the agent with server details',
-    code: `# Copy example config
-cp config.example.js config.js
+    title: 'Set Permissions',
+    description: 'Configure proper file permissions and ownership',
+    code: `# Set ownership to monitor-agent user
+sudo chown -R monitor-agent:monitor-agent /opt/monitor-agent
 
-# Edit configuration with your details
-nano config.js
+# Make the script executable
+sudo chmod +x /opt/monitor-agent/monitor-agent.js
 
-# Key settings to configure:
-# - BACKEND_URL: http://your-backend:3000
-# - API_KEY: Your unique server API key
-# - SERVER_NAME: Identifier for this server
-# - POLL_INTERVAL: Data collection interval (default 30s)`,
+# Set proper directory permissions
+sudo chmod 750 /opt/monitor-agent
+
+# Verify permissions
+ls -la /opt/monitor-agent/`,
   },
   {
     id: 7,
-    title: 'Setup Environment',
-    description: 'Create .env file with backend connection details',
-    code: `# Create .env file
-cat > .env << EOF
-BACKEND_URL=http://your-backend-server:3000
-API_KEY=your-unique-api-key-here
-SERVER_NAME=ubuntu-server-01
-POLL_INTERVAL=30000
-LOG_LEVEL=info
-EOF
-
-# Verify file was created
-cat .env`,
-  },
-  {
-    id: 8,
-    title: 'Test Agent',
-    description: 'Run the agent in foreground to test',
-    code: `# Run agent in test mode
-node index.js
-
-# You should see:
-# ✓ Connected to backend
-# ✓ Starting metric collection
-# ✓ Sending metrics...
-
-# Press Ctrl+C to stop when verification is complete`,
-  },
-  {
-    id: 9,
-    title: 'Setup Systemd Service',
-    description: 'Create systemd service for automatic startup',
+    title: 'Create Systemd Service',
+    description: 'Create systemd service for automatic startup and management',
     code: `# Create systemd service file
-sudo tee /etc/systemd/system/monitoring-agent.service > /dev/null << EOF
+sudo tee /etc/systemd/system/monitor-agent.service > /dev/null <<'EOF'
 [Unit]
-Description=Monitoring Agent Service
-After=network.target
+Description=Monitor Agent - system & security telemetry collector
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-User=$USER
-WorkingDirectory=/opt/monitoring-agent
-ExecStart=/usr/bin/node /opt/monitoring-agent/index.js
-Restart=on-failure
-RestartSec=10
-StandardOutput=append:/opt/monitoring-agent/logs/agent.log
-StandardError=append:/opt/monitoring-agent/logs/agent-error.log
+User=monitor-agent
+Group=monitor-agent
+ExecStart=/usr/bin/node /opt/monitor-agent/monitor-agent.js
+Environment=MONITOR_SERVER_URL=http://YOUR_BACKEND_HOST:4000
+Environment=MONITOR_API_KEY=PASTE_YOUR_API_KEY
+Restart=always
+RestartSec=5
+CPUQuota=15%
+MemoryMax=128M
+NoNewPrivileges=true
+ReadWritePaths=/var/lib/monitor-agent
+SupplementaryGroups=adm systemd-journal
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# Update service permissions
+# Reload systemd daemon
 sudo systemctl daemon-reload`,
   },
   {
-    id: 10,
-    title: 'Start Agent Service',
-    description: 'Enable and start the agent service',
-    code: `# Enable service to start on boot
-sudo systemctl enable monitoring-agent
+    id: 8,
+    title: 'Configure Environment Variables',
+    description: 'Set backend URL and API key in the service',
+    code: `# Edit the service file to set your backend details
+sudo nano /etc/systemd/system/monitor-agent.service
 
-# Start the service
-sudo systemctl start monitoring-agent
+# Update these lines with your values:
+# Environment=MONITOR_SERVER_URL=http://YOUR_BACKEND_HOST:4000
+# Environment=MONITOR_API_KEY=PASTE_YOUR_API_KEY
+
+# Example:
+# Environment=MONITOR_SERVER_URL=http://192.168.1.100:4000
+# Environment=MONITOR_API_KEY=sk_live_abc123def456xyz
+
+# After editing, reload systemd
+sudo systemctl daemon-reload`,
+  },
+  {
+    id: 9,
+    title: 'Enable & Start Service',
+    description: 'Enable the service to start on boot and start it now',
+    code: `# Enable service to start on system boot
+sudo systemctl enable monitor-agent
+
+# Start the service immediately
+sudo systemctl start monitor-agent
 
 # Check service status
-sudo systemctl status monitoring-agent
+sudo systemctl status monitor-agent --no-pager`,
+  },
+  {
+    id: 10,
+    title: 'Verify Installation',
+    description: 'Confirm agent is running and connected to backend',
+    code: `# Check if service is active
+sudo systemctl is-active monitor-agent
 
 # View real-time logs
-journalctl -u monitoring-agent -f`,
+journalctl -u monitor-agent -f
+
+# Press Ctrl+C to exit logs
+
+# Check recent service status
+sudo systemctl status monitor-agent`,
   },
   {
     id: 11,
-    title: 'Verify Installation',
-    description: 'Confirm agent is running and connected',
-    code: `# Check service is active
-sudo systemctl is-active monitoring-agent
+    title: 'Monitor Logs',
+    description: 'View and monitor agent logs for issues',
+    code: `# Stream logs in real-time
+journalctl -u monitor-agent -f
 
-# Check recent logs
-sudo tail -20 /opt/monitoring-agent/logs/agent.log
+# View last 50 lines
+journalctl -u monitor-agent -n 50
 
-# Test API connectivity
-curl http://localhost:9000/health
+# View logs from last hour
+journalctl -u monitor-agent --since "1 hour ago"
 
-# Check if metrics are being collected
-ps aux | grep "node.*index.js"`,
+# View logs with timestamps and priorities
+journalctl -u monitor-agent -o short-precise
+
+# Search for errors
+journalctl -u monitor-agent | grep -i error`,
   },
   {
     id: 12,
-    title: 'Configure Firewall',
-    description: 'Allow agent communication through firewall',
-    code: `# If using UFW firewall
-sudo ufw allow 9000/tcp
+    title: 'Troubleshooting & Maintenance',
+    description: 'Common commands for troubleshooting and service management',
+    code: `# Restart the service
+sudo systemctl restart monitor-agent
 
-# If using iptables
-sudo iptables -A INPUT -p tcp --dport 9000 -j ACCEPT
+# Stop the service
+sudo systemctl stop monitor-agent
 
-# Verify firewall rules
-sudo ufw status
-# OR
-sudo iptables -L -n`,
+# View service state
+sudo systemctl is-active monitor-agent
+
+# Check if service is enabled
+sudo systemctl is-enabled monitor-agent
+
+# View service configuration
+sudo cat /etc/systemd/system/monitor-agent.service
+
+# Check if process is running
+ps aux | grep "node.*monitor-agent"
+
+# Check CPU and memory usage
+top -b -n 1 | grep monitor-agent`,
   },
 ];
 
@@ -416,27 +455,27 @@ export default function SetupPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '12px' }}>
           <div style={{ background: 'var(--panel-2)', padding: '12px', borderRadius: '6px', borderLeft: '3px solid var(--ok)' }}>
             <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>Agent Directory</div>
-            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--ok)' }}>/opt/monitoring-agent</div>
+            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--ok)' }}>/opt/monitor-agent</div>
           </div>
           <div style={{ background: 'var(--panel-2)', padding: '12px', borderRadius: '6px', borderLeft: '3px solid var(--warn)' }}>
-            <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>Service Name</div>
-            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--warn)' }}>monitoring-agent</div>
+            <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>Data Directory</div>
+            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--warn)' }}>/var/lib/monitor-agent</div>
           </div>
           <div style={{ background: 'var(--panel-2)', padding: '12px', borderRadius: '6px', borderLeft: '3px solid var(--accent)' }}>
-            <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>Log File</div>
-            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--accent)' }}>/opt/monitoring-agent/logs/agent.log</div>
+            <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>Service Name</div>
+            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--accent)' }}>monitor-agent</div>
           </div>
           <div style={{ background: 'var(--panel-2)', padding: '12px', borderRadius: '6px', borderLeft: '3px solid var(--crit)' }}>
-            <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>Config File</div>
-            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--crit)' }}>/opt/monitoring-agent/.env</div>
+            <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>Service User</div>
+            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--crit)' }}>monitor-agent</div>
           </div>
           <div style={{ background: 'var(--panel-2)', padding: '12px', borderRadius: '6px', borderLeft: '3px solid var(--ok)' }}>
             <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>Check Status</div>
-            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--ok)' }}>sudo systemctl status monitoring-agent</div>
+            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--ok)' }}>sudo systemctl status monitor-agent</div>
           </div>
           <div style={{ background: 'var(--panel-2)', padding: '12px', borderRadius: '6px', borderLeft: '3px solid var(--accent)' }}>
             <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>View Logs</div>
-            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--accent)' }}>journalctl -u monitoring-agent -f</div>
+            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--accent)' }}>journalctl -u monitor-agent -f</div>
           </div>
         </div>
       </div>
@@ -456,27 +495,42 @@ export default function SetupPage() {
         </h3>
         <div style={{ display: 'grid', gap: '12px' }}>
           <div>
-            <div style={{ fontWeight: '600', marginBottom: '4px' }}>Agent won't start</div>
+            <div style={{ fontWeight: '600', marginBottom: '4px' }}>Service won't start</div>
             <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
-              Check logs: <code style={{ background: 'var(--panel-2)', padding: '2px 6px', borderRadius: '3px' }}>journalctl -u monitoring-agent -n 50</code>
+              Check logs: <code style={{ background: 'var(--panel-2)', padding: '2px 6px', borderRadius: '3px' }}>journalctl -u monitor-agent -n 50</code>
+              <br /> Also verify environment variables are set correctly in service file.
             </div>
           </div>
           <div>
             <div style={{ fontWeight: '600', marginBottom: '4px' }}>Can't connect to backend</div>
             <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
-              Verify BACKEND_URL in .env and check firewall: <code style={{ background: 'var(--panel-2)', padding: '2px 6px', borderRadius: '3px' }}>curl http://backend:3000</code>
+              Verify MONITOR_SERVER_URL in service file and test: <code style={{ background: 'var(--panel-2)', padding: '2px 6px', borderRadius: '3px' }}>curl http://YOUR_BACKEND_HOST:4000</code>
+              <br /> Check firewall allows outbound connections on port 4000.
+            </div>
+          </div>
+          <div>
+            <div style={{ fontWeight: '600', marginBottom: '4px' }}>Service keeps restarting</div>
+            <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
+              Service is configured to restart on failure. Check logs for errors: <code style={{ background: 'var(--panel-2)', padding: '2px 6px', borderRadius: '3px' }}>journalctl -u monitor-agent -f</code>
             </div>
           </div>
           <div>
             <div style={{ fontWeight: '600', marginBottom: '4px' }}>High CPU/Memory usage</div>
             <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
-              Increase POLL_INTERVAL in .env (default 30000ms = 30 seconds)
+              Service is limited to 15% CPU and 128MB memory by systemd config. If hitting limits, edit: <code style={{ background: 'var(--panel-2)', padding: '2px 6px', borderRadius: '3px' }}>sudo nano /etc/systemd/system/monitor-agent.service</code>
             </div>
           </div>
           <div>
-            <div style={{ fontWeight: '600', marginBottom: '4px' }}>Port already in use</div>
+            <div style={{ fontWeight: '600', marginBottom: '4px' }}>Permission denied errors</div>
             <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
-              Kill existing process: <code style={{ background: 'var(--panel-2)', padding: '2px 6px', borderRadius: '3px' }}>sudo kill -9 $(lsof -t -i:9000)</code>
+              Verify ownership: <code style={{ background: 'var(--panel-2)', padding: '2px 6px', borderRadius: '3px' }}>sudo chown -R monitor-agent:monitor-agent /opt/monitor-agent /var/lib/monitor-agent</code>
+            </div>
+          </div>
+          <div>
+            <div style={{ fontWeight: '600', marginBottom: '4px' }}>Invalid API key error</div>
+            <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
+              Edit service file and verify MONITOR_API_KEY: <code style={{ background: 'var(--panel-2)', padding: '2px 6px', borderRadius: '3px' }}>sudo nano /etc/systemd/system/monitor-agent.service</code>
+              <br /> Then reload and restart: <code style={{ background: 'var(--panel-2)', padding: '2px 6px', borderRadius: '3px' }}>sudo systemctl daemon-reload && sudo systemctl restart monitor-agent</code>
             </div>
           </div>
         </div>
