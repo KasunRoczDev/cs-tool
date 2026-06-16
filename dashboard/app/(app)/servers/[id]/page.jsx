@@ -64,7 +64,10 @@ export default function ServerDetailPage() {
         <MetricChart title="Network In (B/s)" data={series} dataKey="net_in" unit="" color="#a78bfa" domain={['auto', 'auto']} />
       </div>
 
-      <h3>Security event timeline</h3>
+      <div className="page-head" style={{ marginTop: 8 }}>
+        <h3 style={{ margin: 0 }}>Security event timeline</h3>
+        <a href={`/security?serverId=${id}`}>View all in Security →</a>
+      </div>
       <div className="timeline">
         {events.map((e, i) => (
           <div key={e.id || i} className={`tl-item sev-${e.severity}`}>

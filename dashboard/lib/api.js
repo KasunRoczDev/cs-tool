@@ -20,6 +20,16 @@ export function getRole() {
   return localStorage.getItem('role');
 }
 
+// Build a querystring from an object, dropping empty values.
+function qs(obj = {}) {
+  const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined && v !== null && v !== '') p.set(k, v);
+  }
+  const s = p.toString();
+  return s ? `?${s}` : '';
+}
+
 async function req(path, opts = {}) {
   const token = getToken();
   const res = await fetch(`${BASE}/api/v1${path}`, {
@@ -51,9 +61,9 @@ export const api = {
   servers: () => req('/servers'),
   server: (id) => req(`/servers/${id}`),
   metrics: (id, from, to) =>
-    req(`/servers/${id}/metrics?` + new URLSearchParams({ ...(from && { from }), ...(to && { to }) })),
+    req(`/servers/${id}/metrics` + qs({ from, to })),
   securityEvents: (id, type) =>
-    req(`/servers/${id}/security-events?` + new URLSearchParams({ ...(type && { type }) })),
+    req(`/servers/${id}/security-events` + qs({ type })),
   registerServer: (body) =>
     req('/servers', { method: 'POST', body: JSON.stringify(body) }),
   alerts: (status) => req('/alerts' + (status ? `?status=${status}` : '')),
@@ -65,4 +75,9 @@ export const api = {
   setUserPassword: (id, password) => req(`/users/${id}/password`, { method: 'PATCH', body: JSON.stringify({ password }) }),
   changeOwnPassword: (password) => req('/users/me/password', { method: 'PATCH', body: JSON.stringify({ password }) }),
   deleteUser: (id) => req(`/users/${id}`, { method: 'DELETE' }),
+  // security analytics
+  secEvents: (f) => req('/security/events' + qs(f)),
+  secStats: (f) => req('/security/stats' + qs(f)),
+  secGrouped: (f) => req('/security/grouped' + qs(f)),
+  secTypes: () => req('/security/types'),
 };

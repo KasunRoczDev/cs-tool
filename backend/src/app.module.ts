@@ -8,6 +8,7 @@ import { IngestModule } from './ingest/ingest.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { SecurityModule } from './security/security.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { UsersModule } from './users/users.module';
     ServersModule,
     IngestModule,
     AlertsModule,
+    SecurityModule,
   ],
 })
 export class AppModule {}
