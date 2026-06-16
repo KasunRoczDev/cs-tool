@@ -1,6 +1,6 @@
 'use client';
 
-import { useDashboard } from '@/context/DashboardContext';
+import { useDashboard } from '@/lib/useDashboard';
 
 export default function MetricsGrid({ events = 0, alerts = 0, incidents = 0, loading = false }) {
   const { widgets } = useDashboard();

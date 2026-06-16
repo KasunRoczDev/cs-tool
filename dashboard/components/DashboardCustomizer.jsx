@@ -1,6 +1,6 @@
 'use client';
 
-import { useDashboard } from '@/context/DashboardContext';
+import { useDashboard } from '@/lib/useDashboard';
 
 export default function DashboardCustomizer() {
   const { theme, toggleTheme, widgets, toggleWidget, dateRange, updateDateRange } = useDashboard();

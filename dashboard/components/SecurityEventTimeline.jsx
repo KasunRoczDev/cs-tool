@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useDashboard } from '@/context/DashboardContext';
+import { useDashboard } from '@/lib/useDashboard';
 
 export default function SecurityEventTimeline({ events = [], loading = false, onLoad = () => {} }) {
   const { widgets, dateRange } = useDashboard();

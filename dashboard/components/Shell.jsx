@@ -32,6 +32,7 @@ export default function Shell({ children }) {
     { href: '/', label: 'Overview' },
     { href: '/compare', label: 'Compare' },
     { href: '/alerts', label: 'Alerts' },
+    { href: '/security', label: 'Security' },
   ];
   if (role === 'admin') nav.push({ href: '/users', label: 'Users' });
 
