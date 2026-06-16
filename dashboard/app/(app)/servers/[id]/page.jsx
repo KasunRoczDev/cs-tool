@@ -1,9 +1,11 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import MetricChart from '@/components/MetricChart';
+import PaginatedEventList from '@/components/PaginatedEventList';
 
 const MAX_POINTS = 120;
 const fmt = (iso) => new Date(iso).toLocaleTimeString();
@@ -64,21 +66,25 @@ export default function ServerDetailPage() {
         <MetricChart title="Network In (B/s)" data={series} dataKey="net_in" unit="" color="#a78bfa" domain={['auto', 'auto']} />
       </div>
 
-      <div className="page-head" style={{ marginTop: 8 }}>
-        <h3 style={{ margin: 0 }}>Security event timeline</h3>
-        <a href={`/security?serverId=${id}`}>View all in Security →</a>
+      <div className="page-head" style={{ marginTop: '24px', marginBottom: '12px' }}>
+        <h3 style={{ margin: 0 }}>Security events</h3>
+        <Link href={`/security?serverId=${id}`} style={{ fontSize: '13px', color: 'var(--accent)', textDecoration: 'none' }}>
+          View all in Security →
+        </Link>
       </div>
-      <div className="timeline">
-        {events.map((e, i) => (
-          <div key={e.id || i} className={`tl-item sev-${e.severity}`}>
-            <span className="tl-time">{fmt(e.time || e.timestamp)}</span>
-            <span className={`pill sev-${e.severity}`}>{e.event_type}</span>
-            <span className="tl-msg">{e.message}</span>
-            {e.source_ip && <span className="tl-ip">{e.source_ip}</span>}
-          </div>
-        ))}
-        {events.length === 0 && <div className="empty">No security events recorded.</div>}
-      </div>
+      <PaginatedEventList
+        events={events.map((e, i) => ({
+          id: e.id || i,
+          timestamp: e.time || e.timestamp,
+          type: e.event_type,
+          severity: e.severity,
+          message: e.message,
+          source_ip: e.source_ip,
+          username: e.username,
+        }))}
+        title="Recent security events"
+        itemsPerPage={15}
+      />
     </div>
   );
 }

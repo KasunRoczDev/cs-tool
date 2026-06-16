@@ -46,33 +46,93 @@ export default function OverviewPage() {
     };
   }, []);
 
+  // Calculate summary statistics
+  const onlineCount = rows.filter((r) => r.status === 'online').length;
+  const offlineCount = rows.filter((r) => r.status === 'offline').length;
+  const avgCpu = rows.length > 0 ? (rows.reduce((sum, r) => sum + (r.cpu_usage || 0), 0) / rows.length).toFixed(1) : 0;
+  const avgMemory = rows.length > 0 ? (rows.reduce((sum, r) => sum + (r.memory_usage || 0), 0) / rows.length).toFixed(1) : 0;
+
   return (
     <div>
       <div className="page-head">
-        <h2>Servers</h2>
+        <h2>Server Overview</h2>
         <button onClick={() => setShowReg(true)}>+ Add server</button>
       </div>
       {showReg && <RegisterServer onClose={() => { setShowReg(false); load(); }} />}
-      <table className="grid">
-        <thead>
-          <tr><th>Status</th><th>Name</th><th>CPU</th><th>Memory</th><th>Disk</th><th>Last seen</th></tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id}>
-              <td><span className={`dot ${r.status}`} title={r.status} /></td>
-              <td><Link href={`/servers/${r.id}`}>{r.name}</Link></td>
-              <td>{bar(r.cpu_usage)}</td>
-              <td>{bar(r.memory_usage)}</td>
-              <td>{bar(r.disk_usage)}</td>
-              <td>{r.last_seen ? new Date(r.last_seen).toLocaleTimeString() : '—'}</td>
-            </tr>
-          ))}
-          {rows.length === 0 && (
-            <tr><td colSpan="6" className="empty">No servers yet. Add one to get an API key.</td></tr>
-          )}
-        </tbody>
-      </table>
+
+      {/* Summary Cards */}
+      <div className="metrics-grid" style={{ marginBottom: '24px' }}>
+        <div className="metric-card">
+          <h3>Total Servers</h3>
+          <div className="value">{rows.length}</div>
+          <div className="trend">Monitoring</div>
+        </div>
+        <div className="metric-card">
+          <h3>Online</h3>
+          <div className="value" style={{ color: 'var(--ok)' }}>{onlineCount}</div>
+          <div className="trend">{rows.length > 0 ? ((onlineCount / rows.length) * 100).toFixed(0) : 0}% available</div>
+        </div>
+        <div className="metric-card">
+          <h3>Offline</h3>
+          <div className="value" style={{ color: 'var(--crit)' }}>{offlineCount}</div>
+          <div className="trend">Needs attention</div>
+        </div>
+        <div className="metric-card">
+          <h3>Avg CPU</h3>
+          <div className="value" style={{ color: 'var(--warn)' }}>{avgCpu}%</div>
+          <div className="trend">Average load</div>
+        </div>
+        <div className="metric-card">
+          <h3>Avg Memory</h3>
+          <div className="value" style={{ color: 'var(--accent)' }}>{avgMemory}%</div>
+          <div className="trend">Average usage</div>
+        </div>
+      </div>
+
+      {/* Servers Table */}
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden', marginBottom: '24px' }}>
+        <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--panel-2)' }}>
+          <h3 style={{ margin: 0, fontSize: '14px' }}>Servers ({rows.length})</h3>
+        </div>
+        <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
+          <table className="grid" style={{ margin: 0, borderRadius: 0 }}>
+            <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--panel-2)', zIndex: 10 }}>
+              <tr><th>Status</th><th>Name</th><th>CPU</th><th>Memory</th><th>Disk</th><th>Last seen</th></tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td><span className={`dot ${r.status}`} title={r.status} /></td>
+                  <td><Link href={`/servers/${r.id}`} style={{ color: 'var(--accent)', textDecoration: 'none' }}>{r.name}</Link></td>
+                  <td>{bar(r.cpu_usage)}</td>
+                  <td>{bar(r.memory_usage)}</td>
+                  <td>{bar(r.disk_usage)}</td>
+                  <td style={{ fontSize: '12px', color: 'var(--muted)' }}>{r.last_seen ? new Date(r.last_seen).toLocaleTimeString() : '—'}</td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr><td colSpan="6" className="empty">No servers yet. Add one to get an API key.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Quick Tips */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '12px' }}>
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '8px', padding: '14px', borderLeft: '3px solid var(--accent)' }}>
+          <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 600 }}>💡 Tip</div>
+          <div style={{ fontSize: '13px' }}>Click on server name to view detailed metrics and security events</div>
+        </div>
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '8px', padding: '14px', borderLeft: '3px solid var(--ok)' }}>
+          <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 600 }}>✓ Real-time</div>
+          <div style={{ fontSize: '13px' }}>Metrics update automatically every 30 seconds via WebSocket</div>
+        </div>
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '8px', padding: '14px', borderLeft: '3px solid var(--warn)' }}>
+          <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px', textTransform: 'uppercase', fontWeight: 600 }}>⚠️ Alert</div>
+          <div style={{ fontSize: '13px' }}>View security events in the Security Dashboard</div>
+        </div>
+      </div>
     </div>
   );
 }

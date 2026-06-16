@@ -5,6 +5,7 @@ import {
   XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from 'recharts';
 import { api } from '@/lib/api';
+import PaginatedEventList from '@/components/PaginatedEventList';
 
 const RANGES = [
   { label: 'Last 1h', ms: 3600e3 },
@@ -198,48 +199,47 @@ export default function SecurityPage() {
       </div>
 
       {/* GROUPED OCCURRENCES — "how many times" */}
-      <h3>Top occurrences</h3>
-      <table className="grid">
-        <thead>
-          <tr><th>Severity</th><th>Type</th><th>Server</th><th>Source IP</th><th>Times</th><th>First seen</th><th>Last seen</th></tr>
-        </thead>
-        <tbody>
-          {grouped.map((g, i) => (
-            <tr key={i}>
-              <td><span className={`pill sev-${g.severity}`}>{g.severity}</span></td>
-              <td>{g.event_type}</td>
-              <td>{g.server_name || '—'}</td>
-              <td className="mono">{g.source_ip || '—'}</td>
-              <td><b>{g.occurrences}</b></td>
-              <td className="muted">{fmtShort(g.first_seen)}</td>
-              <td className="muted">{fmtShort(g.last_seen)}</td>
-            </tr>
-          ))}
-          {grouped.length === 0 && <tr><td colSpan="7" className="empty">No matching events.</td></tr>}
-        </tbody>
-      </table>
+      <h3 style={{ marginBottom: '12px' }}>Top occurrences</h3>
+      <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden', marginBottom: '24px' }}>
+        <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
+          <table className="grid" style={{ margin: 0, borderRadius: 0 }}>
+            <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--panel-2)', zIndex: 10 }}>
+              <tr><th>Severity</th><th>Type</th><th>Server</th><th>Source IP</th><th>Times</th><th>First seen</th><th>Last seen</th></tr>
+            </thead>
+            <tbody>
+              {grouped.map((g, i) => (
+                <tr key={i}>
+                  <td><span className={`pill sev-${g.severity}`}>{g.severity}</span></td>
+                  <td>{g.event_type}</td>
+                  <td>{g.server_name || '—'}</td>
+                  <td className="mono">{g.source_ip || '—'}</td>
+                  <td><b>{g.occurrences}</b></td>
+                  <td className="muted">{fmtShort(g.first_seen)}</td>
+                  <td className="muted">{fmtShort(g.last_seen)}</td>
+                </tr>
+              ))}
+              {grouped.length === 0 && <tr><td colSpan="7" className="empty">No matching events.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </div>
 
-      {/* DETAILED EVENTS */}
-      <h3 style={{ marginTop: 28 }}>Event log ({events.length})</h3>
-      <table className="grid">
-        <thead>
-          <tr><th>Time</th><th>Severity</th><th>Type</th><th>Server</th><th>Source IP</th><th>User</th><th>Message</th></tr>
-        </thead>
-        <tbody>
-          {events.map((e) => (
-            <tr key={e.id}>
-              <td className="muted">{fmt(e.time)}</td>
-              <td><span className={`pill sev-${e.severity}`}>{e.severity}</span></td>
-              <td>{e.event_type}</td>
-              <td>{e.server_name || '—'}</td>
-              <td className="mono">{e.source_ip || '—'}</td>
-              <td>{e.username || '—'}</td>
-              <td>{e.message}</td>
-            </tr>
-          ))}
-          {events.length === 0 && <tr><td colSpan="7" className="empty">No matching events.</td></tr>}
-        </tbody>
-      </table>
+      {/* DETAILED EVENTS — Using Paginated List */}
+      <PaginatedEventList
+        events={events.map((e) => ({
+          id: e.id,
+          timestamp: e.time,
+          type: e.event_type,
+          severity: e.severity,
+          message: e.message,
+          source: e.server_name,
+          source_ip: e.source_ip,
+          username: e.username,
+        }))}
+        loading={loading}
+        title={`Event log (${events.length})`}
+        itemsPerPage={20}
+      />
     </div>
   );
 }
