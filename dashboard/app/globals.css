@@ -1,4 +1,10 @@
 :root {
+  color-scheme: light dark;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+:root,
+[data-theme="dark"] {
   --bg: #0e1117;
   --panel: #161a22;
   --panel-2: #1b2029;
@@ -9,6 +15,19 @@
   --ok: #34d399;
   --warn: #fbbf24;
   --crit: #f87171;
+}
+
+[data-theme="light"] {
+  --bg: #ffffff;
+  --panel: #f5f5f5;
+  --panel-2: #e8e8e8;
+  --border: #d3d3d3;
+  --text: #1a1a1a;
+  --muted: #666666;
+  --accent: #0066cc;
+  --ok: #059669;
+  --warn: #d97706;
+  --crit: #dc2626;
 }
 * { box-sizing: border-box; }
 body {
@@ -114,3 +133,52 @@ label input { margin-top: 4px; }
 .role-tag { text-transform: uppercase; font-size: 11px; letter-spacing: .05em; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px 8px; text-align: center; margin-bottom: 8px; }
 .inline-form { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
 .inline-form input, .inline-form select { width: auto; min-width: 160px; }
+
+/* Dashboard customizer */
+.dashboard-customizer { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 24px; }
+.customizer-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; }
+.customizer-group { display: flex; gap: 10px; align-items: center; }
+.customizer-group label { margin: 0; }
+.theme-toggle { background: transparent; border: 1px solid var(--border); color: var(--muted); padding: 8px 12px; cursor: pointer; }
+.theme-toggle:hover { color: var(--text); }
+
+/* Metrics grid */
+.metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.metric-card { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 20px; text-align: center; }
+.metric-card h3 { margin: 0 0 8px; font-size: 14px; color: var(--muted); text-transform: uppercase; font-weight: 600; }
+.metric-card .value { font-size: 32px; font-weight: 700; color: var(--accent); }
+.metric-card .trend { font-size: 12px; color: var(--muted); margin-top: 8px; }
+
+/* Security timeline */
+.timeline-wrapper { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+.timeline-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.timeline-header h3 { margin: 0; }
+.pagination { display: flex; justify-content: center; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+.pagination button { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 6px 10px; font-size: 12px; }
+.pagination button:hover { background: var(--panel-2); }
+.pagination button.active { background: var(--accent); color: #07101f; }
+.pagination .page-info { color: var(--muted); font-size: 12px; margin: 0 8px; line-height: 30px; }
+
+/* Event item styles */
+.event-item { display: flex; gap: 12px; padding: 12px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 6px; margin-bottom: 8px; align-items: flex-start; }
+.event-time { color: var(--muted); font-size: 12px; white-space: nowrap; font-family: monospace; min-width: 150px; }
+.event-content { flex: 1; }
+.event-type { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; margin-bottom: 4px; text-transform: uppercase; }
+.event-type.alert { background: var(--warn); color: #07101f; }
+.event-type.incident { background: var(--crit); color: white; }
+.event-type.log { background: var(--accent); color: #07101f; }
+.event-message { color: var(--text); margin: 4px 0; }
+.event-details { color: var(--muted); font-size: 12px; }
+
+/* Widget controls */
+.widget-controls { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 16px; }
+.widget-controls h4 { margin: 0 0 12px; font-size: 12px; color: var(--muted); text-transform: uppercase; }
+.widget-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; }
+.widget-toggle { display: flex; align-items: center; gap: 8px; }
+.widget-toggle input { width: auto; }
+.widget-toggle label { margin: 0; color: var(--text); }
+
+/* Date range selector */
+.date-range-selector { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.date-range-selector input { width: 150px; }
+.date-range-selector button { padding: 8px 12px; font-size: 13px; }
