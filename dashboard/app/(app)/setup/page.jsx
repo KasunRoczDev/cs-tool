@@ -79,20 +79,23 @@ ls -la`,
   },
   {
     id: 5,
-    title: 'Create Agent Script',
-    description: 'Create the main monitor-agent.js script',
+    title: 'Copy Agent Script',
+    description: 'Copy the monitor-agent.js script from repository',
     code: `# Create agent directory
 sudo mkdir -p /opt/monitor-agent
 
-# Create the monitor-agent.js file
-sudo nano /opt/monitor-agent/monitor-agent.js
+# Copy the agent script from repository
+# Navigate to your repository/packaging directory
+cd /var/www/packaging
 
-# Paste your monitoring agent code here
-# The script should:
-# - Collect system metrics (CPU, memory, disk, network)
-# - Collect security events
-# - Send data to backend via MONITOR_SERVER_URL
-# - Handle errors gracefully`,
+# Copy the standalone monitor-agent.js to /opt/monitor-agent/
+sudo cp agent/standalone/monitor-agent.js /opt/monitor-agent/monitor-agent.js
+
+# Verify the file was copied
+ls -la /opt/monitor-agent/monitor-agent.js
+
+# Check that it's a valid Node.js script
+head -5 /opt/monitor-agent/monitor-agent.js`,
   },
   {
     id: 6,

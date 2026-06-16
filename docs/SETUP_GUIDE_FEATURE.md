@@ -16,7 +16,7 @@ An interactive step-by-step setup guide for installing and configuring the monit
 2. **Update System & Install Node.js** — System packages and Node.js LTS
 3. **Create System User** — System user for service (`monitor-agent`)
 4. **Prepare Build Environment** — Setup `/var/www/packaging` directory
-5. **Create Agent Script** — Create `monitor-agent.js` main script
+5. **Copy Agent Script** — Copy `monitor-agent.js` from `agent/standalone/`
 6. **Set Permissions** — Configure file and directory permissions
 7. **Create Systemd Service** — Service unit file with resource limits
 8. **Configure Environment** — Set backend URL and API key
@@ -103,13 +103,20 @@ Solutions for:
 
 ```
 /opt/monitor-agent/
-├── monitor-agent.js       (Main application)
+├── monitor-agent.js       (Main application - copied from agent/standalone/)
 ├── package.json          (Node.js dependencies)
 └── node_modules/         (Installed packages)
 
 /var/lib/monitor-agent/
 ├── logs/                 (Application logs)
 └── data/                 (Persistent data)
+```
+
+### Source Files
+
+Agent script is sourced from your repository:
+```
+agent/standalone/monitor-agent.js → /opt/monitor-agent/monitor-agent.js
 ```
 
 ### User & Permissions
