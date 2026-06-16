@@ -10,6 +10,15 @@ export function getToken() {
   if (typeof window === 'undefined') return null;
   return localStorage.getItem('token');
 }
+export function setRole(r) {
+  if (typeof window === 'undefined') return;
+  if (r) localStorage.setItem('role', r);
+  else localStorage.removeItem('role');
+}
+export function getRole() {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('role');
+}
 
 async function req(path, opts = {}) {
   const token = getToken();
@@ -26,13 +35,18 @@ async function req(path, opts = {}) {
     if (typeof window !== 'undefined') window.location.href = '/login';
     throw new Error('Unauthorized');
   }
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try { const j = await res.json(); if (j.message) msg = Array.isArray(j.message) ? j.message.join(', ') : j.message; } catch {}
+    throw new Error(msg);
+  }
   return res.status === 204 ? null : res.json();
 }
 
 export const api = {
   login: (email, password) =>
     req('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  me: () => req('/auth/me'),
   overview: () => req('/servers/overview'),
   servers: () => req('/servers'),
   server: (id) => req(`/servers/${id}`),
@@ -44,4 +58,11 @@ export const api = {
     req('/servers', { method: 'POST', body: JSON.stringify(body) }),
   alerts: (status) => req('/alerts' + (status ? `?status=${status}` : '')),
   resolveAlert: (id) => req(`/alerts/${id}/resolve`, { method: 'POST' }),
+  // users (RBAC)
+  users: () => req('/users'),
+  createUser: (body) => req('/users', { method: 'POST', body: JSON.stringify(body) }),
+  setUserRole: (id, role) => req(`/users/${id}/role`, { method: 'PATCH', body: JSON.stringify({ role }) }),
+  setUserPassword: (id, password) => req(`/users/${id}/password`, { method: 'PATCH', body: JSON.stringify({ password }) }),
+  changeOwnPassword: (password) => req('/users/me/password', { method: 'PATCH', body: JSON.stringify({ password }) }),
+  deleteUser: (id) => req(`/users/${id}`, { method: 'DELETE' }),
 };

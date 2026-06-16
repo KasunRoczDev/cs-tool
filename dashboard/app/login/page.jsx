@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, setToken } from '@/lib/api';
+import { api, setToken, setRole } from '@/lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,8 +13,9 @@ export default function LoginPage() {
     e.preventDefault();
     setErr('');
     try {
-      const { access_token } = await api.login(email, password);
+      const { access_token, user } = await api.login(email, password);
       setToken(access_token);
+      setRole(user?.role);
       router.push('/');
     } catch {
       setErr('Invalid credentials');
