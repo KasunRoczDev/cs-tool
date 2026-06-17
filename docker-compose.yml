@@ -23,11 +23,20 @@ services:
       JWT_SECRET: change-me-to-a-long-random-string
       DASHBOARD_ORIGIN: http://localhost:5173
       SCHEMA_PATH: /app/database/schema.sql
+      # ── Email notifications (set these to enable) ──────────────────────
+      # SMTP_HOST: smtp.example.com
+      # SMTP_PORT: 587
+      # SMTP_SECURE: "false"
+      # SMTP_USER: monitor@example.com
+      # SMTP_PASS: your-smtp-password
+      # SMTP_FROM: monitor@example.com
     ports:
       - "4000:4000"
     volumes:
       # Mount the schema so migrate.js can apply it (build context can't reach ../database).
       - ./database/schema.sql:/app/database/schema.sql:ro
+      - ./database/notifications_migration.sql:/app/database/notifications_migration.sql:ro
+      - ./database/settings_migration.sql:/app/database/settings_migration.sql:ro
     depends_on:
       db:
         condition: service_healthy

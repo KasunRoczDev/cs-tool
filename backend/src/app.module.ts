@@ -9,6 +9,8 @@ import { AlertsModule } from './alerts/alerts.module';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { SecurityModule } from './security/security.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { SettingsModule } from './settings/settings.module';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { SecurityModule } from './security/security.module';
     IngestModule,
     AlertsModule,
     SecurityModule,
+    NotificationsModule,
+    SettingsModule,
   ],
 })
 export class AppModule {}

@@ -3,6 +3,7 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { Pool } from 'pg';
 import { PG_POOL } from '../database/database.module';
 import { RealtimeGateway } from '../realtime/realtime.gateway';
+import { NotificationsService } from '../notifications/notifications.service';
 
 interface MetricSample {
   cpu_usage?: number;
@@ -24,6 +25,7 @@ export class AlertEngineService {
   constructor(
     @Inject(PG_POOL) private readonly pool: Pool,
     private readonly rt: RealtimeGateway,
+    private readonly notif: NotificationsService,
   ) {}
 
   /** Evaluate resource thresholds against a freshly ingested metric sample. */
@@ -48,6 +50,9 @@ export class AlertEngineService {
     if (rows[0].c >= this.bruteCount) {
       await this.raise(serverId, 'ssh_bruteforce', 'critical', this.bruteCount,
         rows[0].c, `SSH brute-force: ${rows[0].c} failed logins in ${this.bruteWindow}s`);
+    } else {
+      // Fix: auto-resolve brute-force alert when attack subsides
+      await this.autoResolve(serverId, 'ssh_bruteforce');
     }
   }
 
@@ -85,7 +90,7 @@ export class AlertEngineService {
     }
   }
 
-  /** Upsert an open alert (dedup via partial unique index) and broadcast it. */
+  /** Upsert an open alert (dedup via partial unique index), broadcast, and notify. */
   private async raise(
     serverId: string,
     type: string,
@@ -94,27 +99,76 @@ export class AlertEngineService {
     value: number | null,
     message: string,
   ) {
+    // Fetch server name for notifications
+    const { rows: srvRows } = await this.pool.query(
+      'SELECT name FROM servers WHERE id = $1', [serverId],
+    );
+    const serverName = srvRows[0]?.name ?? serverId;
+
     const { rows } = await this.pool.query(
       `INSERT INTO alerts (server_id, type, severity, threshold, value, message)
        VALUES ($1,$2,$3,$4,$5,$6)
        ON CONFLICT (server_id, type) WHERE status = 'open'
        DO UPDATE SET value = EXCLUDED.value, message = EXCLUDED.message
-       RETURNING *`,
+       RETURNING *, (xmax = 0) AS is_new`,
       [serverId, type, severity, threshold, value, message],
     );
     if (rows[0]) {
       this.rt.emitAlert(rows[0]);
       this.log.warn(`ALERT ${type} :: ${message}`);
+
+      // Only dispatch notification on a genuinely new alert (not just value update)
+      if (rows[0].is_new) {
+        this.notif.dispatch(
+          {
+            id: rows[0].id,
+            server_id: serverId,
+            server_name: serverName,
+            type,
+            severity,
+            threshold,
+            value,
+            message,
+            status: 'open',
+            created_at: rows[0].created_at,
+          },
+          'open',
+        ).catch((e) => this.log.error(`Notification dispatch failed: ${e.message}`));
+      }
     }
   }
 
   private async autoResolve(serverId: string, type: string) {
+    const { rows: srvRows } = await this.pool.query(
+      'SELECT name FROM servers WHERE id = $1', [serverId],
+    );
+    const serverName = srvRows[0]?.name ?? serverId;
+
     const { rows } = await this.pool.query(
       `UPDATE alerts SET status='resolved', resolved_at=now()
-        WHERE server_id=$1 AND type=$2 AND status='open' RETURNING id`,
+        WHERE server_id=$1 AND type=$2 AND status='open'
+       RETURNING *`,
       [serverId, type],
     );
-    if (rows[0]) this.rt.emitAlert({ id: rows[0].id, status: 'resolved' });
+    if (rows[0]) {
+      this.rt.emitAlert({ id: rows[0].id, status: 'resolved' });
+
+      this.notif.dispatch(
+        {
+          id: rows[0].id,
+          server_id: serverId,
+          server_name: serverName,
+          type,
+          severity: rows[0].severity,
+          threshold: rows[0].threshold,
+          value: rows[0].value,
+          message: rows[0].message,
+          status: 'resolved',
+          created_at: rows[0].created_at,
+        },
+        'resolve',
+      ).catch((e) => this.log.error(`Notification dispatch failed: ${e.message}`));
+    }
   }
 }
 

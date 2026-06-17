@@ -25,6 +25,24 @@ const bcrypt = require('bcryptjs');
   console.log('Applying schema...');
   await client.query(sql);
 
+  // Apply settings migration (idempotent — uses IF NOT EXISTS / ON CONFLICT DO NOTHING).
+  const settingsPath =
+    process.env.SETTINGS_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/settings_migration.sql');
+  if (fs.existsSync(settingsPath)) {
+    console.log('Applying settings migration...');
+    await client.query(fs.readFileSync(settingsPath, 'utf8'));
+  }
+
+  // Apply notifications migration (idempotent — uses IF NOT EXISTS).
+  const notifPath =
+    process.env.NOTIF_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/notifications_migration.sql');
+  if (fs.existsSync(notifPath)) {
+    console.log('Applying notifications migration...');
+    await client.query(fs.readFileSync(notifPath, 'utf8'));
+  }
+
   const email = process.env.ADMIN_EMAIL || 'admin@example.com';
   const password = process.env.ADMIN_PASSWORD || 'admin123';
   const hash = await bcrypt.hash(password, 10);

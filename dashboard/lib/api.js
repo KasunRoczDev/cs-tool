@@ -83,4 +83,18 @@ export const api = {
   secStats: (f) => req('/security/stats' + qs(f)),
   secGrouped: (f) => req('/security/grouped' + qs(f)),
   secTypes: () => req('/security/types'),
+  // platform settings (admin)
+  getSettings: () => req('/settings'),
+  saveSettings: (body) => req('/settings', { method: 'PATCH', body: JSON.stringify(body) }),
+  // notifications
+  notifChannels: () => req('/notifications/channels'),
+  createChannel: (body) => req('/notifications/channels', { method: 'POST', body: JSON.stringify(body) }),
+  updateChannel: (id, body) => req(`/notifications/channels/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteChannel: (id) => req(`/notifications/channels/${id}`, { method: 'DELETE' }),
+  testChannel: (id) => req(`/notifications/channels/${id}/test`, { method: 'POST' }),
+  notifRules: (channelId) => req('/notifications/rules' + (channelId ? `?channelId=${channelId}` : '')),
+  createRule: (body) => req('/notifications/rules', { method: 'POST', body: JSON.stringify(body) }),
+  updateRule: (id, body) => req(`/notifications/rules/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteRule: (id) => req(`/notifications/rules/${id}`, { method: 'DELETE' }),
+  notifLog: (limit) => req('/notifications/log' + (limit ? `?limit=${limit}` : '')),
 };

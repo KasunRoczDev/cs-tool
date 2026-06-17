@@ -29,15 +29,18 @@ export default function Shell({ children }) {
   if (!ready) return null;
 
   const nav = [
-    { href: '/', label: '🖥️ Overview' },
-    { href: '/performance', label: '📈 Performance' },
-    { href: '/security', label: '🔒 Security' },
-    { href: '/vulnerability-report', label: '🛡️ Vuln Report' },
-    { href: '/alerts', label: '🔔 Alerts' },
-    { href: '/compare', label: '⚖️ Compare' },
-    { href: '/setup', label: '⚙️ Setup Guide' },
+    { href: '/',                    label: '🖥️ Overview' },
+    { href: '/performance',         label: '📈 Performance' },
+    { href: '/security',            label: '🔒 Security' },
+    { href: '/vulnerability-report',label: '🛡️ Vuln Report' },
+    { href: '/alerts',              label: '🔔 Alerts' },
+    { href: '/compare',             label: '⚖️ Compare' },
+    { href: '/notifications',       label: '✉️ Notifications' },
+    { href: '/setup',               label: '📋 Setup Guide' },
   ];
   if (role === 'admin') nav.push({ href: '/users', label: '👥 Users' });
+  // Settings available to all roles (theme), SMTP visible but read-only for non-admin
+  nav.push({ href: '/settings', label: '⚙️ Settings' });
 
   return (
     <div className="layout">
