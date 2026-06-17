@@ -97,4 +97,7 @@ export const api = {
   updateRule: (id, body) => req(`/notifications/rules/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   deleteRule: (id) => req(`/notifications/rules/${id}`, { method: 'DELETE' }),
   notifLog: (limit) => req('/notifications/log' + (limit ? `?limit=${limit}` : '')),
+  // ── Analysis ──────────────────────────────────────────────────────────
+  getAnalysisAll:    (window) => req('/analysis' + (window ? `?window=${window}` : '')),
+  getAnalysisServer: (id, window) => req(`/analysis/${id}` + (window ? `?window=${window}` : '')),
 };

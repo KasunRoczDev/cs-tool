@@ -51,18 +51,21 @@ export class IngestService {
     await this.touch(serverId);
     for (const e of events) {
       const ts = e.timestamp ? new Date(e.timestamp) : new Date();
+      // 'info' maps to 'low' for DB enum compatibility
+      const dbSeverity = (e.severity === 'info' ? 'low' : e.severity) ?? 'low';
       const { rows } = await this.pool.query(
         `INSERT INTO security_events
-          (server_id, time, event_type, severity, source_ip, username, message)
-         VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+          (server_id, time, event_type, severity, source_ip, username, message, raw)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
         [
           serverId,
           ts,
           e.event_type,
-          e.severity ?? 'low',
+          dbSeverity,
           e.source_ip ?? null,
           e.username ?? null,
           e.message ?? null,
+          e.raw != null ? JSON.stringify(e.raw) : null,
         ],
       );
       this.rt.emitSecurityEvent(serverId, rows[0]);

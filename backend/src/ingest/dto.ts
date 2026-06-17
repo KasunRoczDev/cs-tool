@@ -2,6 +2,7 @@ import {
   IsArray,
   IsIn,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   ValidateNested,
@@ -31,10 +32,12 @@ export class MetricsBatchDto {
 export class SecurityEventDto {
   @IsOptional() @IsString() timestamp?: string;
   @IsString() event_type!: string;
-  @IsOptional() @IsIn(['low', 'medium', 'high', 'critical']) severity?: string;
+  @IsOptional() @IsIn(['low', 'medium', 'high', 'critical', 'info']) severity?: string;
   @IsOptional() @IsString() source_ip?: string;
   @IsOptional() @IsString() username?: string;
   @IsOptional() @IsString() message?: string;
+  /** Structured metadata — nginx request details, port lists, etc. */
+  @IsOptional() @IsObject() raw?: Record<string, unknown>;
 }
 
 export class SecurityEventsBatchDto {

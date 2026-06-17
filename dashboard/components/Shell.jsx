@@ -36,6 +36,7 @@ export default function Shell({ children }) {
     { href: '/alerts',              label: '🔔 Alerts' },
     { href: '/compare',             label: '⚖️ Compare' },
     { href: '/notifications',       label: '✉️ Notifications' },
+    { href: '/analysis',            label: '🔬 Analysis' },
     { href: '/setup',               label: '📋 Setup Guide' },
   ];
   if (role === 'admin') nav.push({ href: '/users', label: '👥 Users' });

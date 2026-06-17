@@ -11,6 +11,7 @@ import { UsersModule } from './users/users.module';
 import { SecurityModule } from './security/security.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SettingsModule } from './settings/settings.module';
+import { AnalysisModule } from './analysis/analysis.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { SettingsModule } from './settings/settings.module';
     SecurityModule,
     NotificationsModule,
     SettingsModule,
+    AnalysisModule,
   ],
 })
 export class AppModule {}
