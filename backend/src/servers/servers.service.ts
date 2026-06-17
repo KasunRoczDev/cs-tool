@@ -37,9 +37,76 @@ export class ServersService {
     return rows[0];
   }
 
+  async update(id: string, patch: { name?: string; hostname?: string; tags?: Record<string, string> }) {
+    const sets: string[] = [];
+    const params: any[] = [];
+    if (patch.name !== undefined) { params.push(patch.name); sets.push(`name = $${params.length}`); }
+    if (patch.hostname !== undefined) { params.push(patch.hostname); sets.push(`hostname = $${params.length}`); }
+    if (patch.tags !== undefined) { params.push(JSON.stringify(patch.tags)); sets.push(`tags = $${params.length}`); }
+    if (sets.length === 0) return this.get(id);
+    params.push(id);
+    const { rows } = await this.pool.query(
+      `UPDATE servers SET ${sets.join(', ')} WHERE id = $${params.length}
+       RETURNING id, name, hostname, ip_address, os, status, last_seen, tags, created_at`,
+      params,
+    );
+    if (!rows[0]) throw new NotFoundException('Server not found');
+    return rows[0];
+  }
+
   async remove(id: string) {
     await this.pool.query('DELETE FROM servers WHERE id = $1', [id]);
     return { deleted: id };
+  }
+
+  /** Per-server vulnerability summary: security event counts by type and severity. */
+  async vulnerabilityReport() {
+    const { rows: servers } = await this.pool.query(
+      `SELECT id, name, hostname, ip_address, os, status, tags FROM servers ORDER BY name`
+    );
+
+    const { rows: evtCounts } = await this.pool.query(
+      `SELECT server_id,
+              event_type,
+              severity,
+              count(*)::int AS c,
+              max(time) AS last_seen
+         FROM security_events
+        WHERE time > now() - INTERVAL '30 days'
+        GROUP BY server_id, event_type, severity
+        ORDER BY c DESC`
+    );
+
+    const { rows: sevTotals } = await this.pool.query(
+      `SELECT server_id,
+              count(*) FILTER (WHERE severity='critical')::int AS critical,
+              count(*) FILTER (WHERE severity='high')::int AS high,
+              count(*) FILTER (WHERE severity='medium')::int AS medium,
+              count(*) FILTER (WHERE severity='low')::int AS low,
+              count(*)::int AS total,
+              max(time) AS last_event
+         FROM security_events
+        WHERE time > now() - INTERVAL '30 days'
+        GROUP BY server_id`
+    );
+
+    const sevMap = Object.fromEntries(sevTotals.map((r) => [r.server_id, r]));
+    const evtMap: Record<string, typeof evtCounts> = {};
+    for (const e of evtCounts) {
+      if (!evtMap[e.server_id]) evtMap[e.server_id] = [];
+      evtMap[e.server_id].push(e);
+    }
+
+    return servers.map((s) => ({
+      ...s,
+      severity_totals: sevMap[s.id] ?? { critical: 0, high: 0, medium: 0, low: 0, total: 0, last_event: null },
+      events_by_type: evtMap[s.id] ?? [],
+      risk_score: (() => {
+        const t = sevMap[s.id];
+        if (!t) return 0;
+        return Math.min(100, (t.critical * 10 + t.high * 5 + t.medium * 2 + t.low * 0.5));
+      })(),
+    }));
   }
 
   /**

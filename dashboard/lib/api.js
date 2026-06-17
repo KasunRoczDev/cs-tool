@@ -66,6 +66,9 @@ export const api = {
     req(`/servers/${id}/security-events` + qs({ type })),
   registerServer: (body) =>
     req('/servers', { method: 'POST', body: JSON.stringify(body) }),
+  updateServer: (id, body) =>
+    req(`/servers/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  vulnerabilityReport: () => req('/servers/vulnerability-report'),
   alerts: (status) => req('/alerts' + (status ? `?status=${status}` : '')),
   resolveAlert: (id) => req(`/alerts/${id}/resolve`, { method: 'POST' }),
   // users (RBAC)
