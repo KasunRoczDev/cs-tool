@@ -1,0 +1,55 @@
+# SLOs + error budgets — turn raw metrics into actionable signals.
+# An SLO says "how good is good enough"; the error budget is how much failure you
+# can absorb before you stop shipping and fix reliability. Wire these thresholds
+# into your alert engine (backend ALERT_* env or the alert-engine.service).
+
+slos:
+  - name: api_availability
+    description: Successful (non-5xx) responses on the ingestion + dashboard API
+    objective: 99.9            # % over 30 days
+    window_days: 30
+    # 99.9% of 30d = ~43m of allowed downtime/errors per month (the error budget)
+    indicator: 'sum(rate(http_requests_total{status!~"5.."}[5m])) / sum(rate(http_requests_total[5m]))'
+    burn_rate_alerts:
+      - severity: critical
+        condition: 'budget burning >14.4x over 1h'   # page: budget gone in ~2 days
+      - severity: high
+        condition: 'budget burning >6x over 6h'
+
+  - name: api_latency
+    description: p95 request latency under target
+    objective: 95             # % of requests
+    threshold_ms: 300         # p95 <= 300ms
+    window_days: 30
+    indicator: 'histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))'
+
+  - name: ingestion_freshness
+    description: Agent metrics ingested and visible within SLA
+    objective: 99
+    threshold_sec: 60         # newest sample no older than 60s for online servers
+    window_days: 7
+
+  - name: queue_processing
+    description: BullMQ jobs processed without backlog
+    objective: 99
+    threshold_jobs: 1000      # waiting jobs stays under this
+    failed_rate_max: 0.01     # < 1% of jobs end in failed
+    window_days: 7
+
+# Alert thresholds for the gaps this bundle adds (feed into alert-engine).
+thresholds:
+  swap_pct:            { warn: 25,  crit: 50 }     # any sustained swap = latency
+  inode_pct:           { warn: 80,  crit: 90 }
+  conntrack_pct:       { warn: 70,  crit: 85 }     # table full = dropped conns
+  fd_usage_pct:        { warn: 70,  crit: 85 }
+  disk_io_queue:       { warn: 8,   crit: 20 }     # sustained queue depth
+  tcp_time_wait:       { warn: 20000, crit: 40000 }
+  tcp_syn_recv:        { warn: 256, crit: 1024 }   # SYN flood
+  proc_zombie:         { warn: 20,  crit: 100 }
+  load_per_core:       { warn: 1.5, crit: 3.0 }
+  time_drift_ms:       { warn: 500, crit: 2000 }
+  tls_cert_days_left:  { warn: 30,  crit: 7 }      # lower is worse
+  pg_conn_used_pct:    { warn: 75,  crit: 90 }
+  pg_replication_lag:  { warn: 30,  crit: 120 }    # seconds
+  redis_hit_ratio:     { warn: 0.8, crit: 0.5 }    # lower is worse
+  failed_ssh_per_min:  { warn: 20,  crit: 100 }

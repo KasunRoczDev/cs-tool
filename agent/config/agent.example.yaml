@@ -27,3 +27,14 @@ buffer_max_items: 50000
 # Security log sources (auto-detected; override if non-standard)
 auth_log: /var/log/auth.log
 use_journald: true   # prefer `journalctl` when available
+
+# PHP-FPM monitoring. Requires `pm.status_path = /fpm-status` in each pool conf.
+# Reports pool saturation AND the worker with highest CPU/memory + its request.
+fpm:
+  enabled: false
+  pools:
+    - name: www
+      status_url: http://127.0.0.1/fpm-status   # nginx-exposed status (restrict to localhost)
+    # - name: api
+    #   socket: /run/php/php8.3-fpm.sock         # direct socket (needs: apt install libfcgi-bin)
+    #   status_path: /fpm-status

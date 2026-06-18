@@ -1,0 +1,50 @@
+# OPTIONAL observability sidecar. Your platform already has its own collection +
+# TimescaleDB + dashboard, so this is only for teams that also want the standard
+# Prometheus/Grafana/Tempo stack (traces from otel-tracing.js, host metrics from
+# node_exporter, container metrics from cAdvisor, external probes from blackbox).
+#
+# Run alongside your stack:  docker compose -f docker-compose.observability.yml up -d
+# Grafana: http://localhost:3000  (admin/admin — change it)
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    command: ["--config.file=/etc/prometheus/prometheus.yml"]
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports: ["9090:9090"]
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    command: ["--path.rootfs=/host"]
+    pid: host
+    volumes: ["/:/host:ro,rslave"]
+    ports: ["9100:9100"]
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.49.1
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    ports: ["8080:8080"]
+
+  blackbox:
+    # External "is it actually up" probes — synthetic monitoring you currently lack.
+    image: prom/blackbox-exporter:v0.25.0
+    ports: ["9115:9115"]
+
+  tempo:
+    # Trace backend for OpenTelemetry spans from otel-tracing.js.
+    image: grafana/tempo:2.6.0
+    command: ["-config.file=/etc/tempo.yaml"]
+    volumes: ["./tempo.yaml:/etc/tempo.yaml:ro"]
+    ports: ["3200:3200", "4318:4318"]  # 4318 = OTLP HTTP ingest
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    ports: ["3000:3000"]
+    depends_on: [prometheus, tempo]

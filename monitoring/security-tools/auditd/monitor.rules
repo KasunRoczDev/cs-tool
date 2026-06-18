@@ -1,0 +1,43 @@
+# auditd — OS-level audit rules. Your security collector already parses auditd
+# output (EXECVE, SYSCALL); these rules make sure the right events get GENERATED.
+# Install: apt install -y auditd audispd-plugins
+# Place at /etc/audit/rules.d/monitor.rules then: augenrules --load && systemctl restart auditd
+# Verify: auditctl -l
+
+# Make config immutable until reboot (put -e 2 LAST in production).
+# -e 2
+
+## ── Identity & privilege files (privilege escalation, backdoor accounts) ───
+-w /etc/passwd     -p wa -k identity
+-w /etc/shadow     -p wa -k identity
+-w /etc/group      -p wa -k identity
+-w /etc/sudoers    -p wa -k privilege
+-w /etc/sudoers.d/ -p wa -k privilege
+
+## ── SSH & auth config tampering ────────────────────────────────────────────
+-w /etc/ssh/sshd_config -p wa -k sshd_config
+-w /root/.ssh/          -p wa -k root_ssh_keys
+-w /etc/pam.d/          -p wa -k pam
+
+## ── Persistence: cron, systemd units, rc ───────────────────────────────────
+-w /etc/cron.d/         -p wa -k cron
+-w /etc/crontab         -p wa -k cron
+-w /var/spool/cron/     -p wa -k cron
+-w /etc/systemd/system/ -p wa -k systemd_units
+
+## ── App secrets ────────────────────────────────────────────────────────────
+-w /etc/monitor-agent/  -p wa -k agent_config
+
+## ── Suspicious binaries used for pivoting / exfil ──────────────────────────
+-a always,exit -F path=/usr/bin/nc      -F perm=x -k netcat_exec
+-a always,exit -F path=/bin/nc          -F perm=x -k netcat_exec
+-a always,exit -F path=/usr/bin/ncat    -F perm=x -k netcat_exec
+-a always,exit -F path=/usr/bin/wget    -F perm=x -k download_tool
+-a always,exit -F path=/usr/bin/curl    -F perm=x -k download_tool
+
+## ── Privilege escalation syscalls by non-root → root ───────────────────────
+-a always,exit -F arch=b64 -S setuid -S setgid -F auid>=1000 -F auid!=4294967295 -k priv_esc
+-a always,exit -F arch=b64 -S execve -C uid!=euid -F euid=0 -k suid_exec
+
+## ── Kernel module loads (rootkits) ─────────────────────────────────────────
+-a always,exit -F arch=b64 -S init_module -S finit_module -S delete_module -k kernel_module

@@ -1,0 +1,76 @@
+# Falco — runtime threat detection (syscall + container level).
+# This is the single biggest gap vs. log-based detection: Falco sees the ACTION
+# (shell in a container, write to /etc, outbound connect from a server process)
+# regardless of whether anything was logged.
+#
+# Install:  https://falco.org/docs/install-operate/installation/
+#   curl -fsSL https://falco.org/repo/falcosecurity-packages.asc | gpg --dearmor -o /usr/share/keyrings/falco-archive-keyring.gpg
+#   echo "deb [signed-by=/usr/share/keyrings/falco-archive-keyring.gpg] https://download.falco.org/packages/deb stable main" | tee /etc/apt/sources.list.d/falcosecurity.list
+#   apt update && apt install -y falco
+# Drop this file at /etc/falco/falco_rules.local.yaml and: systemctl restart falco
+#
+# Forward Falco's JSON output to your agent so events land in your existing
+# security pipeline (json_output: true in /etc/falco/falco.yaml, then tail
+# /var/log/falco.log or use the gRPC/HTTP output).
+
+- macro: trusted_admins
+  condition: (user.name in (root, ubuntu, deploy))
+
+# ── Shell spawned inside a container = classic post-exploitation ────────────
+- rule: Shell in container
+  desc: A shell was spawned inside a running container (possible breach)
+  condition: >
+    spawned_process and container and
+    proc.name in (bash, sh, zsh, ash, dash, ksh)
+  output: >
+    Shell spawned in container (user=%user.name container=%container.name
+    image=%container.image.repository proc=%proc.cmdline)
+  priority: WARNING
+  tags: [container, shell, mitre_execution]
+
+# ── Write under sensitive system dirs ──────────────────────────────────────
+- rule: Write below etc
+  desc: Modification of files under /etc outside package managers
+  condition: >
+    open_write and fd.directory in (/etc, /etc/ssh, /etc/cron.d) and
+    not proc.name in (apt, dpkg, systemd, cloud-init, unattended-upgr)
+  output: >
+    Write under /etc (user=%user.name file=%fd.name proc=%proc.cmdline)
+  priority: ERROR
+  tags: [filesystem, mitre_persistence]
+
+# ── New executable dropped in temp dirs (cryptominers, droppers) ────────────
+- rule: Executable created in tmp
+  desc: An executable file was created in /tmp, /var/tmp or /dev/shm
+  condition: >
+    evt.type in (open, openat, creat) and evt.is_open_write=true and
+    fd.directory in (/tmp, /var/tmp, /dev/shm) and
+    (fd.name endswith .sh or fd.name endswith .py or fd.name endswith .elf or
+     fd.name glob "*xmrig*" or fd.name glob "*miner*")
+  output: >
+    Executable dropped in temp (user=%user.name file=%fd.name proc=%proc.cmdline)
+  priority: WARNING
+  tags: [filesystem, mitre_execution, cryptomining]
+
+# ── Outbound connection from a server daemon = possible C2 / exfil ──────────
+- rule: Unexpected outbound from web process
+  desc: nginx/node/php made an outbound connection to a non-standard port
+  condition: >
+    outbound and proc.name in (nginx, node, php-fpm, php) and
+    not fd.sport in (80, 443, 53, 5432, 6379, 3306)
+  output: >
+    Unexpected outbound connection (proc=%proc.name dest=%fd.rip:%fd.rport
+    user=%user.name)
+  priority: WARNING
+  tags: [network, mitre_exfiltration, c2]
+
+# ── Sensitive credential file reads by non-admins ──────────────────────────
+- rule: Read sensitive credential file
+  desc: Non-admin read /etc/shadow or an app .env
+  condition: >
+    open_read and (fd.name=/etc/shadow or fd.name glob "*/.env") and
+    not trusted_admins
+  output: >
+    Sensitive file read (user=%user.name file=%fd.name proc=%proc.cmdline)
+  priority: CRITICAL
+  tags: [filesystem, mitre_credential_access]

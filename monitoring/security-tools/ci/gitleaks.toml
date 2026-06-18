@@ -1,0 +1,42 @@
+# gitleaks — secret scanning in CI so .env / keys / tokens never reach a commit.
+# Run: gitleaks detect --config gitleaks.toml --redact --report-path leaks.json
+# CI:  add as a required step; exit code 1 fails the pipeline on any finding.
+# Install: https://github.com/gitleaks/gitleaks/releases
+
+title = "monitor-platform gitleaks config"
+
+[extend]
+useDefault = true  # inherit gitleaks' built-in rules (AWS, GCP, Stripe, JWT, etc.)
+
+[[rules]]
+id = "monitor-agent-api-key"
+description = "Monitor agent API key (agt_...)"
+regex = '''agt_[A-Za-z0-9]{24,}'''
+tags = ["key", "monitor-agent"]
+
+[[rules]]
+id = "jwt-secret-env"
+description = "Hardcoded JWT secret"
+regex = '''(?i)jwt[_-]?secret\s*[:=]\s*["']?[A-Za-z0-9+/=]{16,}'''
+tags = ["secret"]
+
+[[rules]]
+id = "postgres-url"
+description = "Postgres connection string with embedded password"
+regex = '''postgres(?:ql)?:\/\/[^:\s]+:[^@\s]+@'''
+tags = ["database", "credentials"]
+
+[allowlist]
+description = "Ignore docs, examples and test fixtures"
+paths = [
+  '''\.env\.example$''',
+  '''(^|/)docs/''',
+  '''(^|/)test/''',
+  '''README\.md$''',
+]
+# Placeholder values that are intentionally fake.
+regexes = [
+  '''change-me-to-a-long-random-string''',
+  '''admin@example\.com''',
+  '''monitor:monitor@''',
+]

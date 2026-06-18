@@ -1,0 +1,45 @@
+# Fail2Ban — active SSH/web brute-force blocking.
+# Your agent DETECTS brute force; Fail2Ban BLOCKS it. Use both.
+# Install: apt install -y fail2ban
+# Place at /etc/fail2ban/jail.local then: systemctl restart fail2ban
+# Check:  fail2ban-client status sshd
+
+[DEFAULT]
+# Ban for 1h after 5 failures within 10 min; escalate repeat offenders.
+bantime  = 1h
+findtime = 10m
+maxretry = 5
+bantime.increment = true
+bantime.factor = 2
+bantime.maxtime = 1w
+# Never lock yourself out — add your office/VPN ranges here.
+ignoreip = 127.0.0.1/8 ::1
+
+# Email/agent hook: emit bans into your pipeline.
+# action = %(action_mwl)s   # mail-with-logs if SMTP configured
+
+[sshd]
+enabled  = true
+port     = ssh
+backend  = systemd
+maxretry = 4
+
+# Aggressive jail for repeat scanners hitting your web tier.
+[nginx-http-auth]
+enabled = true
+port    = http,https
+logpath = /var/log/nginx/error.log
+
+[nginx-botsearch]
+enabled = true
+port    = http,https
+logpath = /var/log/nginx/access.log
+maxretry = 2
+
+# Bans IPs probing for exploits (.env, wp-login, phpmyadmin) — pairs with your
+# nginx_exploit_probe events.
+[nginx-noscript]
+enabled = true
+port    = http,https
+logpath = /var/log/nginx/access.log
+maxretry = 3
