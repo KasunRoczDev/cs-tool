@@ -25,6 +25,16 @@ const bcrypt = require('bcryptjs');
   console.log('Applying schema...');
   await client.query(sql);
 
+  // Apply products migration (idempotent — uses IF NOT EXISTS / ON CONFLICT DO NOTHING).
+  // Must run after schema.sql since it ALTERs the servers table.
+  const productsPath =
+    process.env.PRODUCTS_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/products_migration.sql');
+  if (fs.existsSync(productsPath)) {
+    console.log('Applying products migration...');
+    await client.query(fs.readFileSync(productsPath, 'utf8'));
+  }
+
   // Apply settings migration (idempotent — uses IF NOT EXISTS / ON CONFLICT DO NOTHING).
   const settingsPath =
     process.env.SETTINGS_MIGRATION_PATH ||
