@@ -7,6 +7,7 @@ import RegisterServer from '@/components/RegisterServer';
 
 const ENV_OPTIONS = ['live', 'staging', 'dev', 'test'];
 const ENV_COLORS = { live: '#34d399', staging: '#fbbf24', dev: '#60a5fa', test: '#a78bfa' };
+const UNASSIGNED = '— Unassigned —';
 
 function EnvTag({ env }) {
   if (!env) return null;
@@ -50,6 +51,37 @@ function EnvEditor({ serverId, currentEnv, onSaved }) {
   );
 }
 
+function ProductEditor({ serverId, currentProductId, products, onSaved }) {
+  const [val, setVal] = useState(currentProductId || '');
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.updateServer(serverId, { product_id: val });
+      const name = products.find((p) => p.id === val)?.name || '';
+      onSaved(val, name);
+    } catch {}
+    setSaving(false);
+  };
+
+  return (
+    <span style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
+      <select value={val} onChange={(e) => setVal(e.target.value)}
+        style={{ fontSize: '11px', padding: '2px 4px', borderRadius: '4px',
+          background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--fg)' }}>
+        <option value="">— unassigned —</option>
+        {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+      </select>
+      <button onClick={save} disabled={saving}
+        style={{ fontSize: '10px', padding: '2px 6px', cursor: 'pointer', borderRadius: '4px',
+          background: 'var(--accent)', color: '#fff', border: 'none' }}>
+        {saving ? '…' : '✓'}
+      </button>
+    </span>
+  );
+}
+
 function bar(value) {
   const v = value ?? 0;
   const cls = v >= 90 ? 'crit' : v >= 75 ? 'warn' : 'ok';
@@ -63,17 +95,22 @@ function bar(value) {
 
 export default function OverviewPage() {
   const [rows, setRows] = useState([]);
+  const [products, setProducts] = useState([]);
   const [showReg, setShowReg] = useState(false);
-  const [editingEnv, setEditingEnv] = useState(null); // server id being edited
+  const [editingEnv, setEditingEnv] = useState(null);     // server id
+  const [editingProduct, setEditingProduct] = useState(null); // server id
   const [envFilter, setEnvFilter] = useState('');
+  const [collapsed, setCollapsed] = useState({});         // { [productName]: bool }
 
-  const load = () => api.servers().then((servers) => {
-    // merge with overview data
-    api.overview().then((overview) => {
-      const metricMap = Object.fromEntries(overview.map((o) => [o.id, o]));
-      setRows(servers.map((s) => ({ ...s, ...metricMap[s.id] })));
-    }).catch(() => setRows(servers));
-  }).catch(() => {});
+  const load = () => {
+    api.products().then(setProducts).catch(() => {});
+    return api.servers().then((servers) => {
+      api.overview().then((overview) => {
+        const metricMap = Object.fromEntries(overview.map((o) => [o.id, o]));
+        setRows(servers.map((s) => ({ ...s, ...metricMap[s.id] })));
+      }).catch(() => setRows(servers));
+    }).catch(() => {});
+  };
 
   useEffect(() => {
     load();
@@ -109,6 +146,30 @@ export default function OverviewPage() {
   const liveCount = rows.filter((r) => getEnv(r) === 'live').length;
   const stagingCount = rows.filter((r) => getEnv(r) === 'staging').length;
 
+  // Group filtered servers by product, ordered by the products list (then Unassigned last).
+  const groups = (() => {
+    const byName = {};
+    for (const r of filtered) {
+      const key = r.product_name || UNASSIGNED;
+      (byName[key] ||= []).push(r);
+    }
+    const ordered = [];
+    for (const p of products) {
+      if (byName[p.name]) { ordered.push([p.name, byName[p.name]]); delete byName[p.name]; }
+    }
+    // Any product names present on servers but not in the products list, then Unassigned.
+    for (const k of Object.keys(byName)) {
+      if (k !== UNASSIGNED) ordered.push([k, byName[k]]);
+    }
+    if (byName[UNASSIGNED]) ordered.push([UNASSIGNED, byName[UNASSIGNED]]);
+    return ordered;
+  })();
+
+  const updateRowEnv = (id, val) =>
+    setRows((rs) => rs.map((s) => (s.id === id ? { ...s, tags: { ...s.tags, env: val } } : s)));
+  const updateRowProduct = (id, productId, productName) =>
+    setRows((rs) => rs.map((s) => (s.id === id ? { ...s, product_id: productId, product_name: productName } : s)));
+
   return (
     <div>
       <div className="page-head">
@@ -123,6 +184,11 @@ export default function OverviewPage() {
           <h3>Total Servers</h3>
           <div className="value">{rows.length}</div>
           <div className="trend">Monitoring</div>
+        </div>
+        <div className="metric-card">
+          <h3>Products</h3>
+          <div className="value">{products.length}</div>
+          <div className="trend">Tracked products</div>
         </div>
         <div className="metric-card">
           <h3>Online</h3>
@@ -157,8 +223,8 @@ export default function OverviewPage() {
       </div>
 
       {/* Filter by env */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '12px', alignItems: 'center' }}>
-        <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Filter:</span>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center' }}>
+        <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Filter env:</span>
         {['', ...ENV_OPTIONS].map((e) => (
           <button key={e} onClick={() => setEnvFilter(e)}
             style={{ fontSize: '12px', padding: '3px 10px', borderRadius: '12px', cursor: 'pointer',
@@ -170,49 +236,83 @@ export default function OverviewPage() {
         ))}
       </div>
 
-      {/* Servers Table */}
-      <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden', marginBottom: '24px' }}>
-        <div style={{ padding: '16px', borderBottom: '1px solid var(--border)', backgroundColor: 'var(--panel-2)' }}>
-          <h3 style={{ margin: 0, fontSize: '14px' }}>Servers ({filtered.length})</h3>
+      {/* One section per product */}
+      {groups.map(([productName, servers]) => {
+        const isCollapsed = collapsed[productName];
+        const online = servers.filter((r) => r.status === 'online').length;
+        return (
+          <div key={productName}
+            style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden', marginBottom: '18px' }}>
+            <div
+              onClick={() => setCollapsed((c) => ({ ...c, [productName]: !c[productName] }))}
+              style={{ padding: '14px 16px', borderBottom: isCollapsed ? 'none' : '1px solid var(--border)',
+                backgroundColor: 'var(--panel-2)', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <h3 style={{ margin: 0, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '12px', color: 'var(--muted)' }}>{isCollapsed ? '▶' : '▼'}</span>
+                {productName === UNASSIGNED ? '📦 Unassigned' : `📦 ${productName}`}
+              </h3>
+              <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
+                {servers.length} server{servers.length !== 1 ? 's' : ''} · {online} online
+              </span>
+            </div>
+            {!isCollapsed && (
+              <div style={{ overflowX: 'auto' }}>
+                <table className="grid" style={{ margin: 0, borderRadius: 0 }}>
+                  <thead style={{ backgroundColor: 'var(--panel-2)' }}>
+                    <tr><th>Status</th><th>Name</th><th>Environment</th><th>Product</th><th>CPU</th><th>Memory</th><th>Disk</th><th>Last seen</th></tr>
+                  </thead>
+                  <tbody>
+                    {servers.map((r) => (
+                      <tr key={r.id}>
+                        <td><span className={`dot ${r.status}`} title={r.status} /></td>
+                        <td><Link href={`/servers/${r.id}`} style={{ color: 'var(--accent)', textDecoration: 'none' }}>{r.name}</Link></td>
+                        <td>
+                          {editingEnv === r.id ? (
+                            <EnvEditor serverId={r.id} currentEnv={getEnv(r)} onSaved={(val) => { updateRowEnv(r.id, val); setEditingEnv(null); }} />
+                          ) : (
+                            <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                              <EnvTag env={getEnv(r)} />
+                              <button onClick={() => setEditingEnv(r.id)}
+                                style={{ fontSize: '10px', padding: '1px 5px', cursor: 'pointer', borderRadius: '3px',
+                                  background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)' }}>✎</button>
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          {editingProduct === r.id ? (
+                            <ProductEditor serverId={r.id} currentProductId={r.product_id} products={products}
+                              onSaved={(pid, pname) => { updateRowProduct(r.id, pid, pname); setEditingProduct(null); }} />
+                          ) : (
+                            <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                              <span style={{ fontSize: '12px', color: r.product_name ? 'var(--fg)' : 'var(--muted)' }}>
+                                {r.product_name || '—'}
+                              </span>
+                              <button onClick={() => setEditingProduct(r.id)}
+                                style={{ fontSize: '10px', padding: '1px 5px', cursor: 'pointer', borderRadius: '3px',
+                                  background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)' }}>✎</button>
+                            </span>
+                          )}
+                        </td>
+                        <td>{bar(r.cpu_usage)}</td>
+                        <td>{bar(r.memory_usage)}</td>
+                        <td>{bar(r.disk_usage)}</td>
+                        <td style={{ fontSize: '12px', color: 'var(--muted)' }}>{r.last_seen ? new Date(r.last_seen).toLocaleTimeString() : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {groups.length === 0 && (
+        <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '10px', padding: '24px', textAlign: 'center', color: 'var(--muted)' }}>
+          No servers match the filter.
         </div>
-        <div style={{ maxHeight: '600px', overflowY: 'auto' }}>
-          <table className="grid" style={{ margin: 0, borderRadius: 0 }}>
-            <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--panel-2)', zIndex: 10 }}>
-              <tr><th>Status</th><th>Name</th><th>Environment</th><th>CPU</th><th>Memory</th><th>Disk</th><th>Last seen</th></tr>
-            </thead>
-            <tbody>
-              {filtered.map((r) => (
-                <tr key={r.id}>
-                  <td><span className={`dot ${r.status}`} title={r.status} /></td>
-                  <td><Link href={`/servers/${r.id}`} style={{ color: 'var(--accent)', textDecoration: 'none' }}>{r.name}</Link></td>
-                  <td>
-                    {editingEnv === r.id ? (
-                      <EnvEditor serverId={r.id} currentEnv={getEnv(r)} onSaved={(val) => {
-                        setRows((rs) => rs.map((s) => s.id === r.id ? { ...s, tags: { ...s.tags, env: val } } : s));
-                        setEditingEnv(null);
-                      }} />
-                    ) : (
-                      <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
-                        <EnvTag env={getEnv(r)} />
-                        <button onClick={() => setEditingEnv(r.id)}
-                          style={{ fontSize: '10px', padding: '1px 5px', cursor: 'pointer', borderRadius: '3px',
-                            background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)' }}>✎</button>
-                      </span>
-                    )}
-                  </td>
-                  <td>{bar(r.cpu_usage)}</td>
-                  <td>{bar(r.memory_usage)}</td>
-                  <td>{bar(r.disk_usage)}</td>
-                  <td style={{ fontSize: '12px', color: 'var(--muted)' }}>{r.last_seen ? new Date(r.last_seen).toLocaleTimeString() : '—'}</td>
-                </tr>
-              ))}
-              {filtered.length === 0 && (
-                <tr><td colSpan="7" className="empty">No servers match the filter.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

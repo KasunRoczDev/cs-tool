@@ -1,6 +1,6 @@
 {
   "name": "monitor-agent",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Lightweight Ubuntu monitoring agent — collects system + security telemetry and streams it to the central platform.",
   "license": "MIT",
   "bin": {

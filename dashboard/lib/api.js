@@ -69,6 +69,11 @@ export const api = {
   updateServer: (id, body) =>
     req(`/servers/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   vulnerabilityReport: () => req('/servers/vulnerability-report'),
+  // products
+  products: () => req('/products'),
+  createProduct: (body) => req('/products', { method: 'POST', body: JSON.stringify(body) }),
+  updateProduct: (id, body) => req(`/products/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteProduct: (id) => req(`/products/${id}`, { method: 'DELETE' }),
   alerts: (status) => req('/alerts' + (status ? `?status=${status}` : '')),
   resolveAlert: (id) => req(`/alerts/${id}/resolve`, { method: 'POST' }),
   // users (RBAC)

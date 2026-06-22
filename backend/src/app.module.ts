@@ -4,6 +4,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseModule } from './database/database.module';
 import { RealtimeModule } from './realtime/realtime.module';
 import { ServersModule } from './servers/servers.module';
+import { ProductsModule } from './products/products.module';
 import { IngestModule } from './ingest/ingest.module';
 import { AlertsModule } from './alerts/alerts.module';
 import { AuthModule } from './auth/auth.module';
@@ -22,6 +23,7 @@ import { AnalysisModule } from './analysis/analysis.module';
     AuthModule,
     UsersModule,
     ServersModule,
+    ProductsModule,
     IngestModule,
     AlertsModule,
     SecurityModule,

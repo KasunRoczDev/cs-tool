@@ -8,12 +8,12 @@ export class ServersService {
   constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
 
   /** Onboard a server; returns the plaintext API key ONCE. */
-  async register(name: string, hostname?: string, ip?: string, os?: string) {
+  async register(name: string, hostname?: string, ip?: string, os?: string, productId?: string) {
     const apiKey = generateApiKey();
     const { rows } = await this.pool.query(
-      `INSERT INTO servers (name, hostname, ip_address, os, api_key_hash)
-       VALUES ($1,$2,$3,$4,$5) RETURNING id, name, hostname, status, created_at`,
-      [name, hostname ?? null, ip ?? null, os ?? null, hashApiKey(apiKey)],
+      `INSERT INTO servers (name, hostname, ip_address, os, api_key_hash, product_id)
+       VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, name, hostname, status, product_id, created_at`,
+      [name, hostname ?? null, ip ?? null, os ?? null, hashApiKey(apiKey), productId ?? null],
     );
     return { ...rows[0], api_key: apiKey };
   }
@@ -21,37 +21,48 @@ export class ServersService {
   list() {
     return this.pool
       .query(
-        `SELECT id, name, hostname, ip_address, os, status, last_seen, tags, created_at
-           FROM servers ORDER BY name`,
+        `SELECT s.id, s.name, s.hostname, s.ip_address, s.os, s.status, s.last_seen,
+                s.tags, s.created_at, s.product_id, p.name AS product_name
+           FROM servers s
+           LEFT JOIN products p ON p.id = s.product_id
+          ORDER BY s.name`,
       )
       .then((r) => r.rows);
   }
 
   async get(id: string) {
     const { rows } = await this.pool.query(
-      `SELECT id, name, hostname, ip_address, os, status, last_seen, tags, created_at
-         FROM servers WHERE id = $1`,
+      `SELECT s.id, s.name, s.hostname, s.ip_address, s.os, s.status, s.last_seen,
+              s.tags, s.created_at, s.product_id, p.name AS product_name
+         FROM servers s
+         LEFT JOIN products p ON p.id = s.product_id
+        WHERE s.id = $1`,
       [id],
     );
     if (!rows[0]) throw new NotFoundException('Server not found');
     return rows[0];
   }
 
-  async update(id: string, patch: { name?: string; hostname?: string; tags?: Record<string, string> }) {
+  async update(
+    id: string,
+    patch: { name?: string; hostname?: string; tags?: Record<string, string>; product_id?: string | null },
+  ) {
     const sets: string[] = [];
     const params: any[] = [];
     if (patch.name !== undefined) { params.push(patch.name); sets.push(`name = $${params.length}`); }
     if (patch.hostname !== undefined) { params.push(patch.hostname); sets.push(`hostname = $${params.length}`); }
     if (patch.tags !== undefined) { params.push(JSON.stringify(patch.tags)); sets.push(`tags = $${params.length}`); }
+    if (patch.product_id !== undefined) {
+      params.push(patch.product_id === '' ? null : patch.product_id);
+      sets.push(`product_id = $${params.length}`);
+    }
     if (sets.length === 0) return this.get(id);
     params.push(id);
-    const { rows } = await this.pool.query(
-      `UPDATE servers SET ${sets.join(', ')} WHERE id = $${params.length}
-       RETURNING id, name, hostname, ip_address, os, status, last_seen, tags, created_at`,
+    await this.pool.query(
+      `UPDATE servers SET ${sets.join(', ')} WHERE id = $${params.length}`,
       params,
     );
-    if (!rows[0]) throw new NotFoundException('Server not found');
-    return rows[0];
+    return this.get(id);
   }
 
   async remove(id: string) {
@@ -161,9 +172,10 @@ export class ServersService {
   overview() {
     return this.pool
       .query(
-        `SELECT s.id, s.name, s.status, s.last_seen,
+        `SELECT s.id, s.name, s.status, s.last_seen, s.product_id, p.name AS product_name,
                 m.cpu_usage, m.memory_usage, m.disk_usage, m.time AS metric_time
            FROM servers s
+           LEFT JOIN products p ON p.id = s.product_id
            LEFT JOIN LATERAL (
              SELECT cpu_usage, memory_usage, disk_usage, time
                FROM metrics WHERE server_id = s.id

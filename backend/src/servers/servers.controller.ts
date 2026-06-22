@@ -18,12 +18,14 @@ class RegisterDto {
   @IsOptional() @IsString() hostname?: string;
   @IsOptional() @IsString() ip_address?: string;
   @IsOptional() @IsString() os?: string;
+  @IsOptional() @IsString() product_id?: string;
 }
 
 class UpdateServerDto {
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() hostname?: string;
   @IsOptional() @IsObject() tags?: Record<string, string>;
+  @IsOptional() @IsString() product_id?: string;
 }
 
 @UseGuards(JwtAuthGuard)
@@ -44,7 +46,7 @@ export class ServersController {
   @Roles('admin', 'operator')
   @Post()
   register(@Body() dto: RegisterDto) {
-    return this.servers.register(dto.name, dto.hostname, dto.ip_address, dto.os);
+    return this.servers.register(dto.name, dto.hostname, dto.ip_address, dto.os, dto.product_id);
   }
 
   @Get('vulnerability-report')
