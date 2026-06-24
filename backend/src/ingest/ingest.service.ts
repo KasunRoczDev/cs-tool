@@ -69,7 +69,12 @@ export class IngestService {
         ],
       );
       this.rt.emitSecurityEvent(serverId, rows[0]);
-      await this.engine.evaluateSecurity(serverId, e.event_type);
+      await this.engine.evaluateSecurityEvent(serverId, {
+        event_type: e.event_type,
+        severity: dbSeverity,
+        message: e.message,
+        raw: e.raw ?? null,
+      });
     }
     return { accepted: events.length };
   }

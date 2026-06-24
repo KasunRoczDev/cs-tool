@@ -46,6 +46,9 @@ const ALERT_TYPES = [
   'cpu_high', 'mem_high', 'disk_full', 'offline', 'ssh_bruteforce',
   'brute_force', 'ssh_failed_login', 'firewall_block', 'port_scan',
   'privilege_escalation', 'sudo', 'malware', 'data_exfiltration',
+  // PHP-FPM alerts
+  'fpm_max_children_reached', 'fpm_pool_saturated', 'fpm_listen_queue_backlog',
+  'fpm_slow_requests', 'fpm_hot_worker', 'fpm_unreachable',
 ];
 
 export class CreateRuleDto {

@@ -11,6 +11,27 @@ interface MetricSample {
   disk_usage?: number;
 }
 
+interface SecurityEvent {
+  event_type: string;
+  severity?: string;
+  message?: string;
+  raw?: Record<string, unknown> | null;
+}
+
+/**
+ * PHP-FPM security-event types that should be promoted to real alerts.
+ * Emitted by the agent's fpm collector (see agent/src/collectors/fpm.js).
+ * Note: per-pool alerts dedup on (server_id, type); the pool name is in the message.
+ */
+const FPM_ALERT_TYPES = new Set([
+  'fpm_max_children_reached',
+  'fpm_pool_saturated',
+  'fpm_listen_queue_backlog',
+  'fpm_slow_requests',
+  'fpm_hot_worker',
+  'fpm_unreachable',
+]);
+
 @Injectable()
 export class AlertEngineService {
   private readonly log = new Logger('AlertEngine');
@@ -21,6 +42,9 @@ export class AlertEngineService {
   private readonly offlineSec = num('ALERT_OFFLINE_SECONDS', 120);
   private readonly bruteCount = num('ALERT_SSH_BRUTEFORCE_COUNT', 5);
   private readonly bruteWindow = num('ALERT_SSH_BRUTEFORCE_WINDOW_SEC', 60);
+  // FPM alerts are edge-triggered: the agent re-emits them each cycle while
+  // unhealthy and stops once recovered. Auto-resolve when none seen for this long.
+  private readonly fpmStaleSec = num('ALERT_FPM_STALE_SECONDS', 300);
 
   constructor(
     @Inject(PG_POOL) private readonly pool: Pool,
@@ -36,6 +60,22 @@ export class AlertEngineService {
       (v) => `Memory at ${v?.toFixed(1)}%`);
     await this.check(serverId, 'disk_full', m.disk_usage, this.disk, 'critical',
       (v) => `Disk at ${v?.toFixed(1)}%`);
+  }
+
+  /** Route an ingested security event to the matching alert logic. */
+  async evaluateSecurityEvent(serverId: string, e: SecurityEvent) {
+    if (e.event_type === 'ssh_failed_login') {
+      await this.evaluateSecurity(serverId, e.event_type);
+    } else if (FPM_ALERT_TYPES.has(e.event_type)) {
+      await this.raise(
+        serverId,
+        e.event_type,
+        e.severity ?? 'medium',
+        null,
+        null,
+        e.message ?? e.event_type,
+      );
+    }
   }
 
   /** Detect SSH brute-force from recent failed logins. */
@@ -71,6 +111,31 @@ export class AlertEngineService {
       await this.raise(s.id, 'offline', 'high', this.offlineSec, null,
         `Server ${s.name} is offline`);
       this.rt.emitServerStatus({ serverId: s.id, status: 'offline' });
+    }
+  }
+
+  /**
+   * Auto-resolve FPM alerts that have gone quiet. FPM events are re-emitted
+   * each agent cycle while the condition holds; once the agent stops sending a
+   * given type, the alert is considered recovered after fpmStaleSec.
+   */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async resolveStaleFpmAlerts() {
+    const { rows } = await this.pool.query(
+      `SELECT a.server_id, a.type
+         FROM alerts a
+        WHERE a.status = 'open'
+          AND a.type = ANY($1)
+          AND NOT EXISTS (
+            SELECT 1 FROM security_events se
+             WHERE se.server_id = a.server_id
+               AND se.event_type = a.type
+               AND se.time > now() - ($2 || ' seconds')::interval
+          )`,
+      [Array.from(FPM_ALERT_TYPES), this.fpmStaleSec],
+    );
+    for (const r of rows) {
+      await this.autoResolve(r.server_id, r.type);
     }
   }
 
