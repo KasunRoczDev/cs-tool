@@ -167,13 +167,18 @@ function parseNginxAccessLine(line, onEvent) {
     const rt = parseFloat(rtm[1]);
     if (rt >= SLOW_REQUEST_SECONDS) {
       const urtm = line.match(/\burt=(\d+(?:\.\d+)?)/);
+      // Optional POST body, IF nginx log_format adds body="$request_body". This is
+      // the only way (without touching the PHP app) to tell apart POST /index.php
+      // actions whose route lives in the form body. Captured quoted or bare.
+      const bm = line.match(/\bbody="([^"]*)"/) || line.match(/\bbody=(\S+)/);
+      const body = bm ? bm[1].slice(0, 300) : null;
       onEvent({
         timestamp: new Date().toISOString(),
         event_type: 'nginx_slow_request',
         severity: rt >= 5 ? 'high' : rt >= 2 ? 'medium' : 'low',
         source_ip: ip,
         message: 'Slow request ' + rt + 's: ' + method + ' ' + path.substring(0, 140) + ' (HTTP ' + status + ')',
-        raw: { method, path, status, request_time: rt, upstream_time: urtm ? parseFloat(urtm[1]) : null },
+        raw: { method, path, status, request_time: rt, upstream_time: urtm ? parseFloat(urtm[1]) : null, body },
       });
     }
   }

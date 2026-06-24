@@ -30,13 +30,25 @@ function normPath(p) {
   return base + '?' + parts.join('&');
 }
 
+// For POST front-controller requests the route lives in the body. If nginx
+// captured it (raw.body), fold its param keys into the label so POST /index.php
+// actions don't all collapse into one row. Body values are masked like the query.
+function withBody(raw) {
+  let label = normPath(raw.path || '');
+  if ((raw.method || '').toUpperCase() === 'POST' && raw.body) {
+    const bodyNorm = normPath('?' + raw.body).slice(1); // reuse query masking
+    if (bodyNorm) label += (label.includes('?') ? '&' : '?') + '[body]' + bodyNorm;
+  }
+  return label;
+}
+
 function aggregateSlow(rows) {
   const g = {};
   for (const r of rows) {
     const raw = r.raw || {};
     const t = Number(raw.request_time);
     if (!isFinite(t)) continue;
-    const key = (raw.method || 'GET') + ' ' + normPath(raw.path || '');
+    const key = (raw.method || 'GET') + ' ' + withBody(raw);
     (g[key] || (g[key] = [])).push(t);
   }
   const pct95 = (a) => a.length ? a.slice().sort((x, y) => x - y)[Math.min(a.length - 1, Math.floor(a.length * 0.95))] : 0;

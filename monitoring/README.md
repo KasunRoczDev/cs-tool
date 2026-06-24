@@ -73,6 +73,23 @@ log_format timed '$remote_addr - $remote_user [$time_local] "$request" '
 access_log /var/log/nginx/access.log timed;
 ```
 
+**Front-controller routes (`/index.php?...`):** for an app that dispatches on
+request params there is no route name beyond those params — the query string *is*
+the route. GET routes are already distinguished by their query. The one blind spot
+is `POST /index.php`, whose action lives in the request body. Without changing the
+PHP app, nginx can log the body so POST actions split apart:
+
+```nginx
+log_format timed '$remote_addr - $remote_user [$time_local] "$request" '
+                 '$status $body_bytes_sent "$http_referer" "$http_user_agent" '
+                 'rt=$request_time urt=$upstream_response_time body="$request_body"';
+```
+
+⚠ `$request_body` can contain credentials/PII — only enable on internal/staging,
+or restrict to specific locations, and never ship these logs off-box unfiltered.
+Note this only enriches the *Slowest endpoints* (latency) table; the CPU table is
+sourced from PHP-FPM status, which never sees the body, so POSTs cannot be split there.
+
 `rt` is end-to-end time, `urt` the PHP-FPM portion. The agent emits a
 `nginx_slow_request` event for any request slower than `MONITOR_NGINX_SLOW_SECONDS`
 (default `1.0`). The dashboard's PHP-FPM page aggregates these into a "Slowest

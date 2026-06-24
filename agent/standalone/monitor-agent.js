@@ -287,10 +287,14 @@ function parseNginxLine(line, onEvent) {
     const rt = parseFloat(rtm[1]);
     if (rt >= (Number(process.env.MONITOR_NGINX_SLOW_SECONDS) || 1.0)) {
       const urtm = line.match(/\burt=(\d+(?:\.\d+)?)/);
+      // Optional POST body if nginx log_format adds body="$request_body" — lets us
+      // distinguish POST /index.php actions without touching the PHP app.
+      const bm = line.match(/\bbody="([^"]*)"/) || line.match(/\bbody=(\S+)/);
+      const body = bm ? bm[1].slice(0, 300) : null;
       onEvent({ timestamp: new Date().toISOString(), event_type: 'nginx_slow_request',
         severity: rt >= 5 ? 'high' : rt >= 2 ? 'medium' : 'low', source_ip: ip,
         message: 'Slow request ' + rt + 's: ' + method + ' ' + p.substring(0, 140) + ' (HTTP ' + status + ')',
-        raw: { method, path: p, status, request_time: rt, upstream_time: urtm ? parseFloat(urtm[1]) : null } });
+        raw: { method, path: p, status, request_time: rt, upstream_time: urtm ? parseFloat(urtm[1]) : null, body } });
     }
   }
   for (const dp of DANGEROUS_PATHS) {
