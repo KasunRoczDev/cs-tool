@@ -63,13 +63,17 @@ show *where inside* a request the time goes. Use the slow-endpoint view below fo
 
 ### Slow-request endpoints (bottleneck view)
 
-The agent ranks the slowest endpoints from the nginx access log. This requires the
-nginx `log_format` to append the request time, then point the access log at the agent:
+The agent ranks the slowest endpoints from the nginx access log, **per site**. This
+box fronts many vhosts, so `host=$host` attributes each request to the correct site,
+and `rt=$request_time` gives the timing. The dashboard shows the real nginx request
+URL per site (path-routed apps show their true routes automatically); only legacy
+front-controller sites need per-host rename rules in `dashboard/lib/routeMap.js`.
+Apply this `log_format` to the shared access log (or every vhost's log):
 
 ```nginx
 log_format timed '$remote_addr - $remote_user [$time_local] "$request" '
                  '$status $body_bytes_sent "$http_referer" "$http_user_agent" '
-                 'rt=$request_time urt=$upstream_response_time';
+                 'host=$host rt=$request_time urt=$upstream_response_time';
 access_log /var/log/nginx/access.log timed;
 ```
 
@@ -82,7 +86,7 @@ PHP app, nginx can log the body so POST actions split apart:
 ```nginx
 log_format timed '$remote_addr - $remote_user [$time_local] "$request" '
                  '$status $body_bytes_sent "$http_referer" "$http_user_agent" '
-                 'rt=$request_time urt=$upstream_response_time body="$request_body"';
+                 'host=$host rt=$request_time urt=$upstream_response_time body="$request_body"';
 ```
 
 ⚠ `$request_body` can contain credentials/PII — only enable on internal/staging,
@@ -95,6 +99,24 @@ sourced from PHP-FPM status, which never sees the body, so POSTs cannot be split
 (default `1.0`). The dashboard's PHP-FPM page aggregates these into a "Slowest
 endpoints" table (count / avg / p95 / max), masking volatile ids so the same logical
 route groups together. Reload nginx after changing the log_format: `nginx -t && systemctl reload nginx`.
+
+### Lynis host-hardening audit
+
+`lynis audit system` writes `/var/log/lynis-report.dat`. The agent's Lynis collector
+parses it and emits security events — no schema change, visible on the dashboard's
+**Security** page (filter event type `lynis_*`) and as a hardening-score card:
+
+- `lynis_audit` (info) — one per run; `hardening_index` (0–100) + counts in `raw`.
+- `lynis_warning` (medium) — one per `warning[]`.
+- `lynis_suggestion` (low) — one per `suggestion[]`.
+
+Enable it: `apt install lynis`, then in `agent.yaml` set the `lynis:` block
+(`enabled: true`, `run: true` to let the agent audit on a schedule, or `run: false`
+to only parse a report you generate via cron). Standalone agent equivalents:
+`MONITOR_LYNIS=true MONITOR_LYNIS_RUN=true MONITOR_LYNIS_INTERVAL_HOURS=24`.
+Lynis needs root to audit fully, so the agent must run privileged for `run: true`.
+Check the raw data on the host any time with:
+`grep -E 'hardening_index|^warning\[\]|^suggestion\[\]' /var/log/lynis-report.dat`.
 
 To persist the new metric fields, add the columns to `database/schema.sql`
 (`swap`, `inode`, `disk_read_bps`, `disk_write_bps`, `disk_io_queue`,

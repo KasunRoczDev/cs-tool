@@ -6,6 +6,7 @@ const { collectMetric } = require('./collectors/metrics');
 const { collectExtendedAsEvent } = require('./collectors/metrics-extended');
 const { collectFpmAsEvents } = require('./collectors/fpm');
 const { startSecurity } = require('./collectors/security');
+const { startLynis } = require('./collectors/lynis');
 const { Sender } = require('./sender');
 
 const CONFIG_PATH =
@@ -20,6 +21,7 @@ function main() {
   let sendTimer;
   let snapshotTimer;
   let stopSecurity = () => {};
+  let stopLynis = () => {};
 
   // Extended host + PHP-FPM snapshots ride the security-events path (no schema
   // change) so they show up in the dashboard's PHP-FPM & System view.
@@ -56,6 +58,10 @@ function main() {
     stopSecurity = startSecurity(cfg, (event) => sender.enqueueEvent(event));
   }
 
+  if (cfg.lynis && cfg.lynis.enabled) {
+    stopLynis = startLynis(cfg, (event) => sender.enqueueEvent(event));
+  }
+
   if (cfg.metrics) {
     emitSnapshots();
     snapshotTimer = setInterval(emitSnapshots, snapshotIntervalMs);
@@ -71,6 +77,7 @@ function main() {
     clearInterval(sendTimer);
     clearInterval(snapshotTimer);
     stopSecurity();
+    stopLynis();
     await sender.flush().catch(() => {});
     process.exit(0);
   };

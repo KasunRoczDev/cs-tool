@@ -70,6 +70,17 @@ export default function SecurityPage() {
   const uniqueIps = stats?.topIps?.length || 0;
   const serversAffected = (stats?.byServer || []).filter((s) => s.c > 0).length;
 
+  // Lynis host-hardening: latest hardening index (from the newest lynis_audit
+  // event) + warning/suggestion counts (from type stats).
+  const lynisAudit = events.find((e) => e.event_type === 'lynis_audit');
+  const hardeningIndex = lynisAudit
+    ? (lynisAudit.raw?.hardening_index ?? Number((String(lynisAudit.message).match(/index\s+(\d+)/) || [])[1]))
+    : null;
+  const lynisWarnings = stats?.byType?.find((t) => t.event_type === 'lynis_warning')?.c || 0;
+  const lynisSuggestions = stats?.byType?.find((t) => t.event_type === 'lynis_suggestion')?.c || 0;
+  const hardColor = hardeningIndex == null ? 'var(--muted)'
+    : hardeningIndex >= 75 ? '#34d399' : hardeningIndex >= 50 ? '#fbbf24' : '#f87171';
+
   const tsData = (stats?.timeseries || []).map((r) => ({ t: fmtShort(r.bucket), low: r.low, medium: r.medium, high: r.high, critical: r.critical }));
   const typeData = (stats?.byType || []).map((r) => ({ name: r.event_type, count: r.c }));
   const ipData = (stats?.topIps || []).map((r) => ({ name: r.source_ip, count: r.c }));
@@ -125,6 +136,17 @@ export default function SecurityPage() {
         <div className="metric-card"><h3>High / Critical</h3><div className="value" style={{ color: 'var(--crit)' }}>{critHigh}</div></div>
         <div className="metric-card"><h3>Top source IPs</h3><div className="value">{uniqueIps}</div></div>
         <div className="metric-card"><h3>Servers affected</h3><div className="value">{serversAffected}</div></div>
+        {(hardeningIndex != null || lynisWarnings > 0 || lynisSuggestions > 0) && (
+          <div className="metric-card" title="Lynis host-hardening audit">
+            <h3>🛡️ Lynis hardening</h3>
+            <div className="value" style={{ color: hardColor }}>
+              {hardeningIndex == null ? '—' : `${hardeningIndex}/100`}
+            </div>
+            <div className="muted" style={{ fontSize: 12 }}>
+              {lynisWarnings} warnings · {lynisSuggestions} suggestions
+            </div>
+          </div>
+        )}
       </div>
 
       {/* CHARTS */}

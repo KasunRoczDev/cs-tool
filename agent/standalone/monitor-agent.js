@@ -40,6 +40,12 @@ const CFG = {
   nginx_access_log: process.env.MONITOR_NGINX_ACCESS_LOG || '/var/log/nginx/access.log',
   fpm_status_url: process.env.MONITOR_FPM_STATUS_URL || '',
   fpm_pool: process.env.MONITOR_FPM_POOL || 'www',
+  lynis: process.env.MONITOR_LYNIS === 'true',
+  lynis_run: process.env.MONITOR_LYNIS_RUN === 'true',
+  lynis_report: process.env.MONITOR_LYNIS_REPORT || '/var/log/lynis-report.dat',
+  lynis_interval_hours: Number(process.env.MONITOR_LYNIS_INTERVAL_HOURS || 24),
+  lynis_run_timeout_sec: Number(process.env.MONITOR_LYNIS_RUN_TIMEOUT || 900),
+  lynis_max_suggestions: Number(process.env.MONITOR_LYNIS_MAX_SUGGESTIONS || 60),
 };
 if (!CFG.server_url || !CFG.api_key) {
   console.error('[agent] MONITOR_SERVER_URL and MONITOR_API_KEY are required');
@@ -291,10 +297,13 @@ function parseNginxLine(line, onEvent) {
       // distinguish POST /index.php actions without touching the PHP app.
       const bm = line.match(/\bbody="([^"]*)"/) || line.match(/\bbody=(\S+)/);
       const body = bm ? bm[1].slice(0, 300) : null;
+      // vhost that served the request (needs host=$host in nginx log_format).
+      const hm = line.match(/\bhost="([^"]*)"/) || line.match(/\bhost=(\S+)/);
+      const host = hm ? hm[1].slice(0, 120) : null;
       onEvent({ timestamp: new Date().toISOString(), event_type: 'nginx_slow_request',
         severity: rt >= 5 ? 'high' : rt >= 2 ? 'medium' : 'low', source_ip: ip,
-        message: 'Slow request ' + rt + 's: ' + method + ' ' + p.substring(0, 140) + ' (HTTP ' + status + ')',
-        raw: { method, path: p, status, request_time: rt, upstream_time: urtm ? parseFloat(urtm[1]) : null, body } });
+        message: 'Slow request ' + rt + 's: ' + (host ? host + ' ' : '') + method + ' ' + p.substring(0, 140) + ' (HTTP ' + status + ')',
+        raw: { host, method, path: p, status, request_time: rt, upstream_time: urtm ? parseFloat(urtm[1]) : null, body } });
     }
   }
   for (const dp of DANGEROUS_PATHS) {
@@ -378,6 +387,40 @@ async function flush() {
   saveBuffer();
 }
 
+/* ---------------- Lynis host-hardening audit ---------------- */
+function lynisSplit(v) { const p = String(v).split('|'); return { test_id: (p[0] || '').trim(), text: (p[1] || '').trim(), details: (p[2] || '').trim(), solution: (p[3] || '').trim() }; }
+function lynisParse(path) {
+  const out = { hardeningIndex: null, version: null, lastRun: null, warnings: [], suggestions: [] };
+  for (const line of fs.readFileSync(path, 'utf8').split('\n')) {
+    const eq = line.indexOf('='); if (eq === -1) continue;
+    const k = line.slice(0, eq).trim(), val = line.slice(eq + 1).trim();
+    if (k === 'hardening_index') out.hardeningIndex = Number(val);
+    else if (k === 'lynis_version') out.version = val;
+    else if (k === 'report_datetime_start') out.lastRun = val;
+    else if (k === 'warning[]') out.warnings.push(lynisSplit(val));
+    else if (k === 'suggestion[]') out.suggestions.push(lynisSplit(val));
+  }
+  return out;
+}
+function lynisEmit(onEvent) {
+  const ts = () => new Date().toISOString();
+  if (!fs.existsSync(CFG.lynis_report)) {
+    onEvent({ timestamp: ts(), event_type: 'lynis_unavailable', severity: 'low', message: `Lynis report not found at ${CFG.lynis_report}`, raw: { report_path: CFG.lynis_report } }); return;
+  }
+  let r; try { r = lynisParse(CFG.lynis_report); } catch (e) { onEvent({ timestamp: ts(), event_type: 'lynis_error', severity: 'low', message: 'Lynis parse failed: ' + e.message.slice(0, 100), raw: {} }); return; }
+  onEvent({ timestamp: ts(), event_type: 'lynis_audit', severity: 'info', message: `Lynis hardening index ${r.hardeningIndex ?? '?'} / 100 — ${r.warnings.length} warning(s), ${r.suggestions.length} suggestion(s)`, raw: { hardening_index: r.hardeningIndex, warnings: r.warnings.length, suggestions: r.suggestions.length, version: r.version, last_run: r.lastRun } });
+  for (const w of r.warnings.slice(0, 100)) onEvent({ timestamp: ts(), event_type: 'lynis_warning', severity: 'medium', message: `[${w.test_id}] ${w.text}`, raw: w });
+  for (const s of r.suggestions.slice(0, CFG.lynis_max_suggestions)) onEvent({ timestamp: ts(), event_type: 'lynis_suggestion', severity: 'low', message: `[${s.test_id}] ${s.text}`, raw: s });
+}
+function lynisCollect(onEvent) {
+  if (!CFG.lynis_run) { try { lynisEmit(onEvent); } catch (e) { console.warn('[lynis] ' + e.message); } return; }
+  let child; try { child = spawn('lynis', ['audit', 'system', '--quick', '--no-colors'], { stdio: 'ignore' }); }
+  catch (e) { onEvent({ timestamp: new Date().toISOString(), event_type: 'lynis_error', severity: 'low', message: 'Lynis run failed: ' + e.message.slice(0, 100), raw: {} }); return; }
+  const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch (_e) {} }, CFG.lynis_run_timeout_sec * 1000);
+  child.on('error', () => { clearTimeout(timer); try { lynisEmit(onEvent); } catch (_e) {} });
+  child.on('exit', () => { clearTimeout(timer); try { lynisEmit(onEvent); } catch (e) { console.warn('[lynis] ' + e.message); } });
+}
+
 /* ---------------- main ---------------- */
 console.log(`[agent] starting -> ${CFG.server_url}`);
 loadBuffer();
@@ -389,7 +432,13 @@ async function emitSnapshots() {
   try { (await fpmEvents()).forEach((ev) => eq.push(ev)); } catch (e) { console.warn('[snapshot] fpm: ' + e.message); }
 }
 if (CFG.metrics) { emitSnapshots(); snap = setInterval(emitSnapshots, CFG.snapshot_interval * 1000); }
+let lynKick, lynTimer;
+if (CFG.lynis) {
+  console.log(`[lynis] enabled (run=${CFG.lynis_run}, every ${CFG.lynis_interval_hours}h)`);
+  lynKick = setTimeout(() => lynisCollect((ev) => eq.push(ev)), 120 * 1000);
+  lynTimer = setInterval(() => lynisCollect((ev) => eq.push(ev)), CFG.lynis_interval_hours * 3600 * 1000);
+}
 st = setInterval(() => flush().catch((e) => console.warn(e.message)), CFG.send_interval * 1000);
-const shutdown = async (s) => { console.log(`[agent] ${s}, flushing`); clearInterval(mt); clearInterval(st); clearInterval(snap); stopSec(); await flush().catch(() => {}); process.exit(0); };
+const shutdown = async (s) => { console.log(`[agent] ${s}, flushing`); clearInterval(mt); clearInterval(st); clearInterval(snap); clearTimeout(lynKick); clearInterval(lynTimer); stopSec(); await flush().catch(() => {}); process.exit(0); };
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));

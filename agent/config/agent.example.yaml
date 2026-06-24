@@ -38,3 +38,17 @@ fpm:
     # - name: api
     #   socket: /run/php/php8.3-fpm.sock         # direct socket (needs: apt install libfcgi-bin)
     #   status_path: /fpm-status
+
+# Lynis host-hardening audit → dashboard (Security page).
+# Parses /var/log/lynis-report.dat and emits the hardening index + warnings +
+# suggestions as security events. Requires: apt install lynis.
+lynis:
+  enabled: false
+  run: true                # agent runs `lynis audit system` itself; set false to only
+                           # parse a report you generate via cron
+  interval_hours: 24       # how often to audit
+  run_timeout_sec: 900     # kill a stuck run after this long
+  initial_delay_sec: 120   # wait after boot before the first run
+  report_path: /var/log/lynis-report.dat
+  max_warnings: 100
+  max_suggestions: 60

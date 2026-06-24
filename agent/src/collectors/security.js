@@ -172,13 +172,17 @@ function parseNginxAccessLine(line, onEvent) {
       // actions whose route lives in the form body. Captured quoted or bare.
       const bm = line.match(/\bbody="([^"]*)"/) || line.match(/\bbody=(\S+)/);
       const body = bm ? bm[1].slice(0, 300) : null;
+      // Which vhost served this — attributes the request to the correct site on a
+      // multi-site host. Needs host=$host in the nginx log_format.
+      const hm = line.match(/\bhost="([^"]*)"/) || line.match(/\bhost=(\S+)/);
+      const host = hm ? hm[1].slice(0, 120) : null;
       onEvent({
         timestamp: new Date().toISOString(),
         event_type: 'nginx_slow_request',
         severity: rt >= 5 ? 'high' : rt >= 2 ? 'medium' : 'low',
         source_ip: ip,
-        message: 'Slow request ' + rt + 's: ' + method + ' ' + path.substring(0, 140) + ' (HTTP ' + status + ')',
-        raw: { method, path, status, request_time: rt, upstream_time: urtm ? parseFloat(urtm[1]) : null, body },
+        message: 'Slow request ' + rt + 's: ' + (host ? host + ' ' : '') + method + ' ' + path.substring(0, 140) + ' (HTTP ' + status + ')',
+        raw: { host, method, path, status, request_time: rt, upstream_time: urtm ? parseFloat(urtm[1]) : null, body },
       });
     }
   }
