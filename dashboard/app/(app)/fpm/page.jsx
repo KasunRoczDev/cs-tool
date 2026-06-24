@@ -11,6 +11,45 @@ const SEV = {
   critical: '#f87171', high: '#fb923c', medium: '#fbbf24', low: '#34d399', info: '#60a5fa',
 };
 
+// Group slow requests by endpoint. The app is a front-controller (everything is
+// /index.php?...), so the query keys ARE the route. We keep enum-like values
+// (e.g. dataKey=order_details) but mask volatile ids (waybill_id=BE018077 → *)
+// so the same logical endpoint aggregates together.
+function normPath(p) {
+  if (!p) return '—';
+  const qi = p.indexOf('?');
+  if (qi === -1) return p;
+  const base = p.slice(0, qi);
+  const parts = p.slice(qi + 1).split('&').map((kv) => {
+    const eq = kv.indexOf('=');
+    if (eq === -1) return kv;
+    const k = kv.slice(0, eq), v = kv.slice(eq + 1);
+    const volatile = /^\d+$/.test(v) || /^[A-Za-z]{1,4}\d{3,}$/.test(v) || v.length > 24;
+    return k + '=' + (volatile ? '*' : v);
+  });
+  return base + '?' + parts.join('&');
+}
+
+function aggregateSlow(rows) {
+  const g = {};
+  for (const r of rows) {
+    const raw = r.raw || {};
+    const t = Number(raw.request_time);
+    if (!isFinite(t)) continue;
+    const key = (raw.method || 'GET') + ' ' + normPath(raw.path || '');
+    (g[key] || (g[key] = [])).push(t);
+  }
+  const pct95 = (a) => a.length ? a.slice().sort((x, y) => x - y)[Math.min(a.length - 1, Math.floor(a.length * 0.95))] : 0;
+  return Object.entries(g).map(([endpoint, ts]) => ({
+    endpoint,
+    count: ts.length,
+    avg: ts.reduce((s, x) => s + x, 0) / ts.length,
+    max: Math.max(...ts),
+    p95: pct95(ts),
+  })).sort((a, b) => b.avg * b.count - a.avg * a.count).slice(0, 12);
+}
+
+function secs(n) { return n == null ? '—' : `${Math.round(n * 1000) / 1000}s`; }
 function bytesMb(n) { return n == null ? '—' : `${Math.round((n / 1048576) * 10) / 10} MB`; }
 function pct(n) { return n == null ? '—' : `${n}%`; }
 function utilColor(u) { return u >= 100 ? '#f87171' : u >= 90 ? '#fb923c' : u >= 70 ? '#fbbf24' : '#34d399'; }
@@ -46,7 +85,13 @@ function WorkerBox({ title, w, metricLabel, metricValue, accent }) {
         <span style={{ color: accent, fontWeight: 700 }}>{w.method || 'GET'}</span> {w.request_uri || w.script || '—'}
       </div>
       <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>
-        pid {w.pid} · {w.duration_ms != null ? `${w.duration_ms} ms` : '—'} · {bytesMb(w.memory)} · {pct(w.cpu)} cpu
+        pid {w.pid} · {bytesMb(w.memory)} · {pct(w.cpu)} cpu
+      </div>
+      <div style={{ display: 'flex', gap: 14, fontSize: 11, marginTop: 4 }}>
+        <span><span style={{ color: 'var(--muted)' }}>Wait </span>
+          {w.wait_ms != null ? `${w.wait_ms} ms` : '—'}</span>
+        <span><span style={{ color: 'var(--muted)' }}>Time </span>
+          {w.duration_ms != null ? `${w.duration_ms} ms` : '—'}</span>
       </div>
     </div>
   );
@@ -125,11 +170,41 @@ function ExtendedHost({ ext }) {
   );
 }
 
+function SlowEndpoints({ rows }) {
+  if (!rows || rows.length === 0) return null;
+  const sevColor = (s) => s >= 5 ? '#f87171' : s >= 2 ? '#fb923c' : '#fbbf24';
+  return (
+    <Card style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>🐌 Slowest endpoints (bottlenecks)</div>
+      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>
+        Aggregated from nginx request time, ranked by total time impact. IDs masked to group routes.
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 60px 70px 70px 70px', gap: 8,
+        fontSize: 11, color: 'var(--muted)', paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
+        <div>Endpoint</div><div style={{ textAlign: 'right' }}>Count</div>
+        <div style={{ textAlign: 'right' }}>Avg</div><div style={{ textAlign: 'right' }}>p95</div>
+        <div style={{ textAlign: 'right' }}>Max</div>
+      </div>
+      {rows.map((r) => (
+        <div key={r.endpoint} style={{ display: 'grid', gridTemplateColumns: '1fr 60px 70px 70px 70px',
+          gap: 8, fontSize: 12, padding: '7px 0', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
+          <div style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>{r.endpoint}</div>
+          <div style={{ textAlign: 'right' }}>{r.count}</div>
+          <div style={{ textAlign: 'right', fontWeight: 700, color: sevColor(r.avg) }}>{secs(r.avg)}</div>
+          <div style={{ textAlign: 'right', color: sevColor(r.p95) }}>{secs(r.p95)}</div>
+          <div style={{ textAlign: 'right', color: sevColor(r.max) }}>{secs(r.max)}</div>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
 export default function FpmPage() {
   const [servers, setServers] = useState([]);
   const [serverId, setServerId] = useState('');
   const [pools, setPools] = useState([]);
   const [ext, setExt] = useState(null);
+  const [slow, setSlow] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
@@ -150,18 +225,22 @@ export default function FpmPage() {
       const latestByPool = {};
       let latestExt = null;
       const al = [];
+      const slowRows = [];
       for (const r of rows) {
         if (r.event_type === 'fpm_pool_snapshot' && r.raw) {
           const name = r.raw.fpm_pool || 'www';
           if (!latestByPool[name]) latestByPool[name] = r.raw;
         } else if (r.event_type === 'system_extended_snapshot' && r.raw) {
           if (!latestExt) latestExt = r.raw;
+        } else if (r.event_type === 'nginx_slow_request' && r.raw) {
+          slowRows.push(r);
         } else if (FPM_ALERT_TYPES.has(r.event_type)) {
           if (al.length < 30) al.push(r);
         }
       }
       setPools(Object.values(latestByPool));
       setExt(latestExt);
+      setSlow(aggregateSlow(slowRows));
       setAlerts(al);
       setErr('');
     } catch (e) {
@@ -200,6 +279,7 @@ export default function FpmPage() {
       )}
 
       {pools.map((p) => <PoolCard key={p.fpm_pool} pool={p} />)}
+      <SlowEndpoints rows={slow} />
       <ExtendedHost ext={ext} />
 
       {alerts.length > 0 && (

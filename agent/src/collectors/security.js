@@ -146,12 +146,37 @@ const DANGEROUS_PATHS = [
 
 const SCANNER_UA_RE = /(?:zgrab|masscan|sqlmap|nikto|nessus|openvas|dirbuster|gobuster|wfuzz|nuclei|acunetix|nmap|python-requests\/[0-2]\.|libwww-perl|curl\/[0-7]\.|scrapy|harvester)/i;
 
+// Requests slower than this (seconds) are surfaced as bottlenecks. Needs nginx
+// log_format to append the request time, e.g.:
+//   log_format timed '$remote_addr - $remote_user [$time_local] "$request" '
+//                    '$status $body_bytes_sent "$http_referer" "$http_user_agent" '
+//                    'rt=$request_time urt=$upstream_response_time';
+const SLOW_REQUEST_SECONDS = Number(process.env.MONITOR_NGINX_SLOW_SECONDS) || 1.0;
+
 function parseNginxAccessLine(line, onEvent) {
   const m = line.match(NGINX_ACCESS_RE);
   if (!m) return;
   const [, ip, method, rawPath, statusStr, ua] = m;
   const status = parseInt(statusStr, 10);
   const path = rawPath.substring(0, 300);
+
+  // Slow-request bottleneck: the real "which endpoint is killing us" signal.
+  // request_time is end-to-end; upstream_response_time is the PHP-FPM portion.
+  const rtm = line.match(/\brt=(\d+(?:\.\d+)?)/);
+  if (rtm) {
+    const rt = parseFloat(rtm[1]);
+    if (rt >= SLOW_REQUEST_SECONDS) {
+      const urtm = line.match(/\burt=(\d+(?:\.\d+)?)/);
+      onEvent({
+        timestamp: new Date().toISOString(),
+        event_type: 'nginx_slow_request',
+        severity: rt >= 5 ? 'high' : rt >= 2 ? 'medium' : 'low',
+        source_ip: ip,
+        message: 'Slow request ' + rt + 's: ' + method + ' ' + path.substring(0, 140) + ' (HTTP ' + status + ')',
+        raw: { method, path, status, request_time: rt, upstream_time: urtm ? parseFloat(urtm[1]) : null },
+      });
+    }
+  }
 
   for (const dp of DANGEROUS_PATHS) {
     if (dp.re.test(path)) {

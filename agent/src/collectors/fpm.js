@@ -71,9 +71,14 @@ function analysePool(poolName, status) {
   const procs = Array.isArray(status.processes) ? status.processes : [];
 
   // Top CPU + top memory worker, each with the request it was serving.
+  // Only Idle workers are considered: for an Idle worker the `request uri`,
+  // `last request cpu` and `request duration` all describe the SAME completed
+  // request. For a Running worker the cpu/memory are from its PREVIOUS request
+  // while the uri/duration are the in-progress one — pairing them is wrong.
   let topCpu = null;
   let topMem = null;
   for (const p of procs) {
+    if (String(p.state).toLowerCase() !== 'idle') continue;
     const cpu = Number(p['last request cpu'] ?? 0);
     const mem = Number(p['last request memory'] ?? 0);
     if (!topCpu || cpu > topCpu.cpu) topCpu = pick(p, cpu, mem);
@@ -156,7 +161,13 @@ function pick(p, cpu, mem) {
     memory_mb: round(mem / 1048576),
     request_uri: p['request uri'] || p.script || '',    // ← the request at that time
     method: p['request method'] || '',
-    duration_ms: round(Number(p['request duration'] ?? 0) / 1000), // µs → ms
+    duration_ms: round(Number(p['request duration'] ?? 0) / 1000), // µs → ms (= "time")
+    // Per-request queue wait, if the agent supplies it. PHP-FPM status does NOT
+    // expose this per worker, so it is null unless populated upstream (e.g. from
+    // an access-log %{wait} field or a derived measurement). Accepts µs or ms.
+    wait_ms: p['request wait'] != null
+      ? round(Number(p['request wait']) / 1000)
+      : (p.wait_ms != null ? round(Number(p.wait_ms)) : null),
     content_length: Number(p['content length'] ?? 0),
     user: p.user || '-',
     script: p.script || '',

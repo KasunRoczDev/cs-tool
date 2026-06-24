@@ -190,14 +190,20 @@ async function fetchFpm(url) {
 }
 function fpmPick(p) {
   const mem = Number(p['last request memory'] ?? 0);
+  const wait = p['request wait'] != null ? rnd(Number(p['request wait']) / 1000)
+    : (p.wait_ms != null ? rnd(Number(p.wait_ms)) : null);
   return { pid: p.pid, state: p.state, cpu: rnd(Number(p['last request cpu'] ?? 0)), memory: mem,
     memory_mb: rnd(mem / 1048576), request_uri: p['request uri'] || p.script || '', method: p['request method'] || '',
-    duration_ms: rnd(Number(p['request duration'] ?? 0) / 1000), user: p.user || '-', requests_served: Number(p.requests ?? 0) };
+    duration_ms: rnd(Number(p['request duration'] ?? 0) / 1000), wait_ms: wait, user: p.user || '-', requests_served: Number(p.requests ?? 0) };
 }
 function analyseFpm(pool, status) {
   const procs = Array.isArray(status.processes) ? status.processes : [];
   let topCpu = null, topMem = null;
+  // Idle workers only: their uri + cpu + duration describe the same completed
+  // request. Running workers report cpu/mem from the PREVIOUS request, so pairing
+  // them with the in-progress uri/duration is wrong.
   for (const p of procs) {
+    if (String(p.state).toLowerCase() !== 'idle') continue;
     const c = Number(p['last request cpu'] ?? 0), m = Number(p['last request memory'] ?? 0);
     if (!topCpu || c > topCpu.cpu) topCpu = fpmPick(p);
     if (!topMem || m > topMem.memory) topMem = fpmPick(p);
@@ -274,6 +280,19 @@ function parseNginxLine(line, onEvent) {
   const [, ip, method, rawPath, statusStr, ua] = m;
   const status = parseInt(statusStr, 10);
   const p = rawPath.substring(0, 300);
+  // Slow-request bottleneck (needs nginx log_format to append rt=$request_time
+  // [urt=$upstream_response_time]). MONITOR_NGINX_SLOW_SECONDS overrides default 1s.
+  const rtm = line.match(/\brt=(\d+(?:\.\d+)?)/);
+  if (rtm) {
+    const rt = parseFloat(rtm[1]);
+    if (rt >= (Number(process.env.MONITOR_NGINX_SLOW_SECONDS) || 1.0)) {
+      const urtm = line.match(/\burt=(\d+(?:\.\d+)?)/);
+      onEvent({ timestamp: new Date().toISOString(), event_type: 'nginx_slow_request',
+        severity: rt >= 5 ? 'high' : rt >= 2 ? 'medium' : 'low', source_ip: ip,
+        message: 'Slow request ' + rt + 's: ' + method + ' ' + p.substring(0, 140) + ' (HTTP ' + status + ')',
+        raw: { method, path: p, status, request_time: rt, upstream_time: urtm ? parseFloat(urtm[1]) : null } });
+    }
+  }
   for (const dp of DANGEROUS_PATHS) {
     if (dp.re.test(p)) {
       onEvent({ timestamp: new Date().toISOString(), event_type: dp.type, severity: dp.severity, source_ip: ip,
