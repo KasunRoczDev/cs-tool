@@ -49,6 +49,29 @@ function aggregateSlow(rows) {
   })).sort((a, b) => b.avg * b.count - a.avg * a.count).slice(0, 12);
 }
 
+// Bottleneck ranking from the fpm_hot_worker events we ALREADY collect — each is
+// a CPU-spike sample with the request that worker was running. No nginx/server
+// config needed; works the moment hot-worker alerts exist.
+function aggregateHot(rows) {
+  const g = {};
+  for (const r of rows) {
+    const w = (r.raw && r.raw.worker) || {};
+    const cpu = Number(w.cpu);
+    if (!isFinite(cpu)) continue;
+    const key = (w.method || 'GET') + ' ' + normPath(w.request_uri || w.script || '');
+    const e = g[key] || (g[key] = { cpus: [], times: [] });
+    e.cpus.push(cpu);
+    if (isFinite(Number(w.duration_ms))) e.times.push(Number(w.duration_ms));
+  }
+  return Object.entries(g).map(([endpoint, e]) => ({
+    endpoint,
+    count: e.cpus.length,
+    avgCpu: e.cpus.reduce((s, x) => s + x, 0) / e.cpus.length,
+    maxCpu: Math.max(...e.cpus),
+    avgTime: e.times.length ? e.times.reduce((s, x) => s + x, 0) / e.times.length : null,
+  })).sort((a, b) => b.count * b.avgCpu - a.count * a.avgCpu).slice(0, 15);
+}
+
 function secs(n) { return n == null ? '—' : `${Math.round(n * 1000) / 1000}s`; }
 function bytesMb(n) { return n == null ? '—' : `${Math.round((n / 1048576) * 10) / 10} MB`; }
 function pct(n) { return n == null ? '—' : `${n}%`; }
@@ -143,6 +166,35 @@ function Stat({ label, value, warn }) {
   );
 }
 
+function HotRequests({ rows }) {
+  if (!rows || rows.length === 0) return null;
+  const cpuColor = (c) => c >= 100 ? '#f87171' : c >= 90 ? '#fb923c' : '#fbbf24';
+  return (
+    <Card style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>🔥 CPU-heavy requests (bottlenecks)</div>
+      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 10 }}>
+        Aggregated from FPM hot-worker samples, ranked by how often × how hard each endpoint burns CPU. IDs masked to group routes.
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 56px 70px 70px 80px', gap: 8,
+        fontSize: 11, color: 'var(--muted)', paddingBottom: 6, borderBottom: '1px solid var(--border)' }}>
+        <div>Endpoint</div><div style={{ textAlign: 'right' }}>Hits</div>
+        <div style={{ textAlign: 'right' }}>Avg CPU</div><div style={{ textAlign: 'right' }}>Max CPU</div>
+        <div style={{ textAlign: 'right' }}>Avg time</div>
+      </div>
+      {rows.map((r) => (
+        <div key={r.endpoint} style={{ display: 'grid', gridTemplateColumns: '1fr 56px 70px 70px 80px',
+          gap: 8, fontSize: 12, padding: '7px 0', borderBottom: '1px solid var(--border)', alignItems: 'center' }}>
+          <div style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>{r.endpoint}</div>
+          <div style={{ textAlign: 'right' }}>{r.count}</div>
+          <div style={{ textAlign: 'right', fontWeight: 700, color: cpuColor(r.avgCpu) }}>{Math.round(r.avgCpu)}%</div>
+          <div style={{ textAlign: 'right', color: cpuColor(r.maxCpu) }}>{Math.round(r.maxCpu)}%</div>
+          <div style={{ textAlign: 'right' }}>{r.avgTime == null ? '—' : `${Math.round(r.avgTime)} ms`}</div>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
 const EXT_FIELDS = [
   ['swap', 'Swap %', (v) => `${v}%`], ['inode', 'Inode %', (v) => `${v}%`],
   ['conntrack', 'conntrack %', (v) => v == null ? 'n/a' : `${v}%`],
@@ -205,6 +257,7 @@ export default function FpmPage() {
   const [pools, setPools] = useState([]);
   const [ext, setExt] = useState(null);
   const [slow, setSlow] = useState([]);
+  const [hot, setHot] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
@@ -226,6 +279,7 @@ export default function FpmPage() {
       let latestExt = null;
       const al = [];
       const slowRows = [];
+      const hotRows = [];
       for (const r of rows) {
         if (r.event_type === 'fpm_pool_snapshot' && r.raw) {
           const name = r.raw.fpm_pool || 'www';
@@ -234,6 +288,9 @@ export default function FpmPage() {
           if (!latestExt) latestExt = r.raw;
         } else if (r.event_type === 'nginx_slow_request' && r.raw) {
           slowRows.push(r);
+        } else if (r.event_type === 'fpm_hot_worker' && r.raw) {
+          hotRows.push(r);
+          if (al.length < 30) al.push(r);
         } else if (FPM_ALERT_TYPES.has(r.event_type)) {
           if (al.length < 30) al.push(r);
         }
@@ -241,6 +298,7 @@ export default function FpmPage() {
       setPools(Object.values(latestByPool));
       setExt(latestExt);
       setSlow(aggregateSlow(slowRows));
+      setHot(aggregateHot(hotRows));
       setAlerts(al);
       setErr('');
     } catch (e) {
@@ -279,6 +337,7 @@ export default function FpmPage() {
       )}
 
       {pools.map((p) => <PoolCard key={p.fpm_pool} pool={p} />)}
+      <HotRequests rows={hot} />
       <SlowEndpoints rows={slow} />
       <ExtendedHost ext={ext} />
 
