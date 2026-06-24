@@ -36,24 +36,37 @@ function StatusDot({ s }) {
 // ── Channel Form ───────────────────────────────────────────────────────────
 function ChannelForm({ initial, onSave, onCancel }) {
   const [form, setForm] = useState(initial ?? {
-    name: '', type: 'email', to: '', cc: '', subject_prefix: '[Monitor Alert]', enabled: true,
+    name: '', type: 'email', to: '', cc: '', subject_prefix: '[Monitor Alert]',
+    webhook_url: '', username: 'Server Monitor', enabled: true,
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const isDiscord = form.type === 'discord';
 
   const save = async () => {
     if (!form.name.trim()) return setErr('Name is required');
-    if (!form.to.trim()) return setErr('Recipient email is required');
+    if (isDiscord) {
+      if (!form.webhook_url.trim()) return setErr('Discord webhook URL is required');
+    } else if (!form.to.trim()) {
+      return setErr('Recipient email is required');
+    }
     setSaving(true); setErr('');
     try {
-      const body = {
-        name: form.name,
-        type: 'email',
-        config: { to: form.to, cc: form.cc || undefined, subject_prefix: form.subject_prefix || '[Monitor Alert]' },
-        enabled: form.enabled,
-      };
+      const body = isDiscord
+        ? {
+            name: form.name,
+            type: 'discord',
+            config: { webhook_url: form.webhook_url.trim(), username: form.username || undefined },
+            enabled: form.enabled,
+          }
+        : {
+            name: form.name,
+            type: 'email',
+            config: { to: form.to, cc: form.cc || undefined, subject_prefix: form.subject_prefix || '[Monitor Alert]' },
+            enabled: form.enabled,
+          };
       await onSave(body);
     } catch (e) { setErr(e.message); }
     setSaving(false);
@@ -61,7 +74,7 @@ function ChannelForm({ initial, onSave, onCancel }) {
 
   return (
     <div className="card" style={{ marginBottom: 0 }}>
-      <h4 style={{ marginBottom: 16 }}>{initial ? 'Edit Channel' : 'New Email Channel'}</h4>
+      <h4 style={{ marginBottom: 16 }}>{initial ? 'Edit Channel' : 'New Channel'}</h4>
       {err && <div style={{ color: 'var(--crit)', marginBottom: 10, fontSize: 13 }}>{err}</div>}
       <div style={{ display: 'grid', gap: 12 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
@@ -70,20 +83,49 @@ function ChannelForm({ initial, onSave, onCancel }) {
             placeholder="e.g. Ops team alerts" />
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
-          Recipients (comma-separated)
-          <input value={form.to} onChange={(e) => set('to', e.target.value)}
-            placeholder="ops@example.com, oncall@example.com" />
+          Channel type
+          <select value={form.type} onChange={(e) => set('type', e.target.value)} disabled={!!initial}>
+            <option value="email">Email</option>
+            <option value="discord">Discord</option>
+          </select>
         </label>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
-          CC (optional)
-          <input value={form.cc} onChange={(e) => set('cc', e.target.value)}
-            placeholder="manager@example.com" />
-        </label>
-        <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
-          Subject prefix
-          <input value={form.subject_prefix} onChange={(e) => set('subject_prefix', e.target.value)}
-            placeholder="[Monitor Alert]" />
-        </label>
+
+        {isDiscord ? (
+          <>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+              Discord webhook URL
+              <input value={form.webhook_url} onChange={(e) => set('webhook_url', e.target.value)}
+                placeholder="https://discord.com/api/webhooks/…" />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+              Bot display name (optional)
+              <input value={form.username} onChange={(e) => set('username', e.target.value)}
+                placeholder="Server Monitor" />
+            </label>
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+              In Discord: Channel → Edit Channel → Integrations → Webhooks → New Webhook → Copy Webhook URL.
+            </div>
+          </>
+        ) : (
+          <>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+              Recipients (comma-separated)
+              <input value={form.to} onChange={(e) => set('to', e.target.value)}
+                placeholder="ops@example.com, oncall@example.com" />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+              CC (optional)
+              <input value={form.cc} onChange={(e) => set('cc', e.target.value)}
+                placeholder="manager@example.com" />
+            </label>
+            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+              Subject prefix
+              <input value={form.subject_prefix} onChange={(e) => set('subject_prefix', e.target.value)}
+                placeholder="[Monitor Alert]" />
+            </label>
+          </>
+        )}
+
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
           <input type="checkbox" checked={form.enabled} onChange={(e) => set('enabled', e.target.checked)} />
           Channel enabled
@@ -269,7 +311,9 @@ export default function NotificationsPage() {
     setTesting(ch.id);
     try {
       await api.testChannel(ch.id);
-      notify(`Test email sent to ${ch.config?.to}`);
+      notify(ch.type === 'discord'
+        ? 'Test message posted to Discord'
+        : `Test email sent to ${ch.config?.to}`);
     } catch (e) { notify(`Test failed: ${e.message}`); }
     setTesting(null);
   };
@@ -316,9 +360,12 @@ export default function NotificationsPage() {
 
   const channelInitial = editChannel ? {
     name: editChannel.name,
+    type: editChannel.type ?? 'email',
     to: editChannel.config?.to ?? '',
     cc: editChannel.config?.cc ?? '',
     subject_prefix: editChannel.config?.subject_prefix ?? '[Monitor Alert]',
+    webhook_url: editChannel.config?.webhook_url ?? '',
+    username: editChannel.config?.username ?? 'Server Monitor',
     enabled: editChannel.enabled,
   } : null;
 
@@ -347,7 +394,7 @@ export default function NotificationsPage() {
       )}
 
       <div className="page-head">
-        <h2>Email Notifications</h2>
+        <h2>Notifications</h2>
         <span className="muted">{channels.length} channel{channels.length !== 1 ? 's' : ''}, {rules.length} rule{rules.length !== 1 ? 's' : ''}</span>
       </div>
 
@@ -376,13 +423,13 @@ export default function NotificationsPage() {
           ) : (
             <button className="btn-primary" onClick={() => { setShowChannelForm(true); setEditChannel(null); }}
               style={{ marginBottom: 20 }}>
-              + New email channel
+              + New channel
             </button>
           )}
 
           {channels.length === 0 && !showChannelForm && (
             <div className="empty" style={{ padding: '40px 0', textAlign: 'center', color: 'var(--muted)' }}>
-              No channels yet. Create one to start receiving email alerts.
+              No channels yet. Create an email or Discord channel to start receiving alerts.
             </div>
           )}
 
@@ -394,15 +441,38 @@ export default function NotificationsPage() {
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div>
-                    <div style={{ fontWeight: 700, fontSize: 15 }}>{ch.name}</div>
-                    <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
-                      To: <span style={{ color: 'var(--fg)' }}>{ch.config?.to}</span>
-                      {ch.config?.cc && <> &nbsp;·&nbsp; CC: {ch.config.cc}</>}
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>
+                      {ch.name}
+                      <span style={{
+                        marginLeft: 8, fontSize: 11, fontWeight: 600, padding: '1px 7px',
+                        borderRadius: 10, background: 'var(--panel-2)', border: '1px solid var(--border)',
+                        color: 'var(--muted)', textTransform: 'capitalize',
+                      }}>{ch.type ?? 'email'}</span>
                     </div>
-                    <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                      Prefix: {ch.config?.subject_prefix ?? '[Monitor Alert]'}
-                      &nbsp;·&nbsp; {ch.rule_count ?? 0} rule{ch.rule_count !== 1 ? 's' : ''}
-                    </div>
+                    {ch.type === 'discord' ? (
+                      <>
+                        <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
+                          Webhook: <span style={{ color: 'var(--fg)' }}>
+                            {(ch.config?.webhook_url ?? '').replace(/(\/[\w-]{6})[\w-]+$/, '$1…')}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                          As: {ch.config?.username ?? 'Server Monitor'}
+                          &nbsp;·&nbsp; {ch.rule_count ?? 0} rule{ch.rule_count !== 1 ? 's' : ''}
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
+                          To: <span style={{ color: 'var(--fg)' }}>{ch.config?.to}</span>
+                          {ch.config?.cc && <> &nbsp;·&nbsp; CC: {ch.config.cc}</>}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                          Prefix: {ch.config?.subject_prefix ?? '[Monitor Alert]'}
+                          &nbsp;·&nbsp; {ch.rule_count ?? 0} rule{ch.rule_count !== 1 ? 's' : ''}
+                        </div>
+                      </>
+                    )}
                   </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                     <button onClick={() => testChannel(ch)} disabled={testing === ch.id}

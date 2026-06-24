@@ -12,8 +12,8 @@
 CREATE TABLE IF NOT EXISTS notification_channels (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name        TEXT NOT NULL,                   -- user-facing label, e.g. "Ops team email"
-  type        TEXT NOT NULL DEFAULT 'email',   -- 'email' (extensible to slack, webhook, …)
-  config      JSONB NOT NULL DEFAULT '{}',     -- { "to": "ops@example.com", "cc": "...", … }
+  type        TEXT NOT NULL DEFAULT 'email',   -- 'email' | 'discord' (extensible to slack, webhook, …)
+  config      JSONB NOT NULL DEFAULT '{}',     -- email: { "to","cc","subject_prefix" } · discord: { "webhook_url","username" }
   enabled     BOOLEAN NOT NULL DEFAULT TRUE,
   created_by  UUID REFERENCES users(id) ON DELETE SET NULL,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),

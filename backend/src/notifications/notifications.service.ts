@@ -2,6 +2,7 @@ import { Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Pool } from 'pg';
 import { PG_POOL } from '../database/database.module';
 import { EmailService, AlertEmailContext } from './email.service';
+import { DiscordService, AlertDiscordContext } from './discord.service';
 import { CreateChannelDto, UpdateChannelDto, CreateRuleDto, UpdateRuleDto } from './dto';
 
 export interface AlertPayload {
@@ -24,6 +25,7 @@ export class NotificationsService {
   constructor(
     @Inject(PG_POOL) private readonly pool: Pool,
     private readonly email: EmailService,
+    private readonly discord: DiscordService,
   ) {}
 
   // ── Channels ─────────────────────────────────────────────────────────────
@@ -140,6 +142,14 @@ export class NotificationsService {
     );
     const ch = rows[0];
     if (!ch) throw new NotFoundException('Channel not found');
+
+    if (ch.type === 'discord') {
+      const webhookUrl = ch.config?.webhook_url;
+      if (!webhookUrl) throw new Error('Channel has no webhook_url configured');
+      await this.discord.sendTest(webhookUrl, ch.config?.username);
+      return { sent: true, to: 'discord' };
+    }
+
     const to = ch.config?.to;
     if (!to) throw new Error('Channel has no "to" email configured');
     await this.email.sendTest(to);
@@ -168,8 +178,6 @@ export class NotificationsService {
    * event = 'resolve' → fires rules with on_resolve = true
    */
   async dispatch(alert: AlertPayload, event: 'open' | 'resolve') {
-    if (!(await this.email.isConfigured())) return;
-
     // Load matching rules in one query.
     const { rows: rules } = await this.pool.query(
       `SELECT nr.*, nc.config, nc.type, nc.enabled AS channel_enabled
@@ -211,6 +219,11 @@ export class NotificationsService {
         const cfg = rule.config ?? {};
         const to: string = cfg.to;
         if (!to) { this.log.warn(`Rule ${rule.id}: channel has no "to" address`); return; }
+        if (!(await this.email.isConfigured())) {
+          this.log.warn(`Rule ${rule.id}: SMTP not configured — skipping email`);
+          await this.logEntry(rule, alert, event, 'failed', 'SMTP not configured');
+          return;
+        }
         const ctx: AlertEmailContext = {
           alertId: alert.id,
           serverName: alert.server_name,
@@ -223,6 +236,25 @@ export class NotificationsService {
           timestamp: new Date(),
         };
         await this.email.sendAlert(to, cfg.cc, cfg.subject_prefix ?? '[Monitor Alert]', ctx);
+      } else if (rule.type === 'discord') {
+        const cfg = rule.config ?? {};
+        const webhookUrl: string = cfg.webhook_url;
+        if (!webhookUrl) { this.log.warn(`Rule ${rule.id}: channel has no webhook_url`); return; }
+        const ctx: AlertDiscordContext = {
+          alertId: alert.id,
+          serverName: alert.server_name,
+          alertType: alert.type,
+          severity: alert.severity,
+          message: alert.message,
+          value: alert.value,
+          threshold: alert.threshold,
+          event,
+          timestamp: new Date(),
+        };
+        await this.discord.sendAlert(webhookUrl, cfg.username, ctx);
+      } else {
+        this.log.warn(`Rule ${rule.id}: unknown channel type "${rule.type}"`);
+        return;
       }
       await this.logEntry(rule, alert, event, 'sent', null);
     } catch (err: any) {

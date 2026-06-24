@@ -20,10 +20,15 @@ export class EmailConfig {
   @IsOptional() @IsString() subject_prefix?: string; // defaults to "[Monitor Alert]"
 }
 
+export class DiscordConfig {
+  @IsString() webhook_url!: string;  // Discord channel webhook URL
+  @IsOptional() @IsString() username?: string; // bot display name, defaults to "Server Monitor"
+}
+
 export class CreateChannelDto {
   @IsString() name!: string;
-  /** Only 'email' for now; extend later. */
-  @IsIn(['email']) type!: string;
+  /** Supported channel types. */
+  @IsIn(['email', 'discord']) type!: string;
   @IsObject() config!: Record<string, any>;
   @IsOptional() @IsBoolean() enabled?: boolean;
 }
