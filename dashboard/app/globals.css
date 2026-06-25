@@ -175,3 +175,30 @@ label input { margin-top: 4px; }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 .btn-secondary { background: var(--panel-2); color: var(--fg, var(--text)); border: 1px solid var(--border); padding: 8px 16px; border-radius: 7px; cursor: pointer; font-size: 13px; }
 .btn-secondary:hover { background: var(--panel); }
+
+
+/* ── Topology editor ─────────────────────────────────────────────────────── */
+.env-tabs { display: inline-flex; gap: 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 4px; }
+.env-tab { background: transparent; color: var(--muted); border: 0; padding: 6px 14px; border-radius: 6px; font-weight: 600; font-size: 13px; text-transform: capitalize; }
+.env-tab:hover { background: var(--panel-2); color: var(--text); filter: none; }
+.env-tab.active { background: var(--accent); color: #07101f; }
+.env-count { display: inline-block; margin-left: 6px; font-size: 11px; background: rgba(0,0,0,.18); border-radius: 8px; padding: 0 6px; }
+
+.topo-wrap { display: grid; grid-template-columns: 190px 1fr 230px; gap: 12px; align-items: start; }
+
+.topo-palette { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 12px; position: sticky; top: 8px; }
+.palette-title { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 8px; }
+.palette-item { display: flex; align-items: center; gap: 8px; background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px; padding: 9px 10px; margin-bottom: 7px; font-size: 13px; font-weight: 600; cursor: grab; user-select: none; }
+.palette-item:hover { border-color: var(--accent); }
+.palette-item:active { cursor: grabbing; }
+.palette-icon { font-size: 16px; }
+.palette-hint { font-size: 11px; color: var(--muted); margin-top: 10px; line-height: 1.5; }
+.palette-hint kbd { background: var(--panel-2); border: 1px solid var(--border); border-radius: 4px; padding: 0 4px; font-size: 10px; }
+
+.topo-canvas { height: 70vh; min-height: 460px; overflow: auto; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; }
+.topo-canvas svg { display: block; touch-action: none; }
+
+.topo-inspector { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; position: sticky; top: 8px; min-height: 200px; }
+.insp-title { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+.topo-inspector label { font-size: 12px; }
+.insp-stats { margin-top: 16px; padding-top: 10px; border-top: 1px solid var(--border); font-size: 12px; color: var(--muted); }

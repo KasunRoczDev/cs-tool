@@ -53,6 +53,16 @@ const bcrypt = require('bcryptjs');
     await client.query(fs.readFileSync(notifPath, 'utf8'));
   }
 
+  // Apply topology migration (idempotent — IF NOT EXISTS). Must run after the
+  // products table exists, since topologies references products(id).
+  const topologyPath =
+    process.env.TOPOLOGY_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/topology_migration.sql');
+  if (fs.existsSync(topologyPath)) {
+    console.log('Applying topology migration...');
+    await client.query(fs.readFileSync(topologyPath, 'utf8'));
+  }
+
   const email = process.env.ADMIN_EMAIL || 'admin@example.com';
   const password = process.env.ADMIN_PASSWORD || 'admin123';
   const hash = await bcrypt.hash(password, 10);

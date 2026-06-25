@@ -13,6 +13,7 @@ import { SecurityModule } from './security/security.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SettingsModule } from './settings/settings.module';
 import { AnalysisModule } from './analysis/analysis.module';
+import { TopologyModule } from './topology/topology.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { AnalysisModule } from './analysis/analysis.module';
     NotificationsModule,
     SettingsModule,
     AnalysisModule,
+    TopologyModule,
   ],
 })
 export class AppModule {}

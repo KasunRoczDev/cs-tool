@@ -26,6 +26,7 @@ services:
       PRODUCTS_MIGRATION_PATH: /app/database/products_migration.sql
       SETTINGS_MIGRATION_PATH: /app/database/settings_migration.sql
       NOTIF_MIGRATION_PATH: /app/database/notifications_migration.sql
+      TOPOLOGY_MIGRATION_PATH: /app/database/topology_migration.sql
       # ── Email notifications (set these to enable) ──────────────────────
       # SMTP_HOST: smtp.example.com
       # SMTP_PORT: 587
@@ -41,6 +42,7 @@ services:
       - ./database/products_migration.sql:/app/database/products_migration.sql:ro
       - ./database/notifications_migration.sql:/app/database/notifications_migration.sql:ro
       - ./database/settings_migration.sql:/app/database/settings_migration.sql:ro
+      - ./database/topology_migration.sql:/app/database/topology_migration.sql:ro
     depends_on:
       db:
         condition: service_healthy

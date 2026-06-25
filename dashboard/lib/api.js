@@ -105,4 +105,9 @@ export const api = {
   // ── Analysis ──────────────────────────────────────────────────────────
   getAnalysisAll:    (window) => req('/analysis' + (window ? `?window=${window}` : '')),
   getAnalysisServer: (id, window) => req(`/analysis/${id}` + (window ? `?window=${window}` : '')),
+  // ── Topology (server graph relations, per product + environment) ──────
+  topology:     (productId, env) => req(`/topology/${productId}/${env}`),
+  topologyEnvs: (productId) => req(`/topology/${productId}/environments`),
+  saveTopology: (productId, env, graph) =>
+    req(`/topology/${productId}/${env}`, { method: 'PUT', body: JSON.stringify(graph) }),
 };

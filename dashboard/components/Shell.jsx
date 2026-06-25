@@ -31,6 +31,7 @@ export default function Shell({ children }) {
   const nav = [
     { href: '/',                    label: '🖥️ Overview' },
     { href: '/products',            label: '📦 Products' },
+    { href: '/topology',            label: '🕸️ Topology' },
     { href: '/performance',         label: '📈 Performance' },
     { href: '/fpm',                 label: '🐘 PHP-FPM' },
     { href: '/security',            label: '🔒 Security' },
