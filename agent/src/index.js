@@ -4,6 +4,7 @@
 const { loadConfig } = require('./config');
 const { collectMetric } = require('./collectors/metrics');
 const { collectExtendedAsEvent } = require('./collectors/metrics-extended');
+const { collectServiceMetricsAsEvent } = require('./collectors/service-metrics');
 const { collectFpmAsEvents } = require('./collectors/fpm');
 const { startSecurity } = require('./collectors/security');
 const { startLynis } = require('./collectors/lynis');
@@ -39,6 +40,13 @@ function main() {
       }
     } catch (e) {
       console.warn(`[agent] fpm snapshot error: ${e.message}`);
+    }
+    try {
+      if (cfg.service_metrics && cfg.service_metrics.enabled) {
+        sender.enqueueEvent(await collectServiceMetricsAsEvent(cfg));
+      }
+    } catch (e) {
+      console.warn(`[agent] service-metrics snapshot error: ${e.message}`);
     }
   };
 

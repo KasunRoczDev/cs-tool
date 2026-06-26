@@ -33,6 +33,7 @@ export default function Shell({ children }) {
     { href: '/products',            label: '📦 Products' },
     { href: '/topology',            label: '🕸️ Topology' },
     { href: '/performance',         label: '📈 Performance' },
+    { href: '/service-metrics',     label: '📊 Service Metrics' },
     { href: '/fpm',                 label: '🐘 PHP-FPM' },
     { href: '/security',            label: '🔒 Security' },
     { href: '/vulnerability-report',label: '🛡️ Vuln Report' },

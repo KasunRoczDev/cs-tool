@@ -52,3 +52,64 @@ lynis:
   report_path: /var/log/lynis-report.dat
   max_warnings: 100
   max_suggestions: 60
+
+# Service / application metrics → dashboard "Service Metrics" page + alerts.
+# Collected on the snapshot interval and shipped as one `service_metrics_snapshot`
+# event. Every probe is optional: leave a section out and that metric stays blank.
+service_metrics:
+  enabled: false
+
+  # API Response Time P95 + API Error Rate.
+  # Easiest: expose a JSON endpoint returning { p95_ms, error_rate } or
+  # { requests, errors, p95_ms }. error_rate may be a 0-1 fraction or 0-100 %.
+  api:
+    metrics_url: http://127.0.0.1:4000/internal/metrics
+    # Or parse an nginx access log whose format ends with $request_time (or rt=<sec>):
+    # access_log: /var/log/nginx/access.log
+    # window_lines: 2000
+
+  # PostgreSQL Connections + Slow Queries (long-running active queries).
+  postgres:
+    url: postgres://monitor:monitor@127.0.0.1:5432/monitoring   # needs psql on PATH
+    slow_ms: 1000
+
+  # Redis Memory Usage (and the backing store for BullMQ below). Needs redis-cli.
+  redis:
+    url: redis://127.0.0.1:6379
+    # host: 127.0.0.1
+    # port: 6379
+    # password: ""
+    maxmemory_mb: 1024    # used only if Redis has no maxmemory configured
+
+  # BullMQ Pending Jobs + Failed Jobs (read from Redis above).
+  bullmq:
+    prefix: bull
+    queues:
+      - orders
+      - notifications
+
+  # Docker Restart Count — sum of RestartCount across running containers. Needs docker.
+  docker:
+    enabled: true
+
+  # SSL Expiry Days — minimum runway across these TLS endpoints. Needs openssl.
+  tls_targets:
+    - monitor.example.com:443
+
+  # Failed SSH Attempts in this window (uses journald or auth_log above).
+  ssh_window_sec: 300
+
+  # Order Processing Success Rate (business KPI). JSON { success, total } / { rate },
+  # or a SQL query returning one row "success total".
+  orders:
+    metrics_url: http://127.0.0.1:4000/internal/orders-health
+    # pg_url: postgres://monitor:monitor@127.0.0.1:5432/appdb
+    # query: "SELECT count(*) FILTER (WHERE status='completed'), count(*) FROM orders WHERE created_at > now() - interval '1 hour'"
+
+  # Optional threshold overrides (warn/crit). invert=true means lower is worse.
+  # thresholds:
+  #   api_p95_ms:       { warn: 1000, crit: 3000 }
+  #   api_error_rate:   { warn: 1,    crit: 5 }
+  #   redis_memory_pct: { warn: 80,   crit: 95 }
+  #   ssl_expiry_days:  { warn: 14,   crit: 7, invert: true }
+  #   order_success_rate: { warn: 99, crit: 95, invert: true }

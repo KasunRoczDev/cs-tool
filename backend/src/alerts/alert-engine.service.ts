@@ -46,6 +46,22 @@ export class AlertEngineService {
   // unhealthy and stops once recovered. Auto-resolve when none seen for this long.
   private readonly fpmStaleSec = num('ALERT_FPM_STALE_SECONDS', 300);
 
+  // Service / application metric thresholds (from service_metrics_snapshot).
+  // "Higher is worse" metrics:
+  private readonly svcApiP95Ms      = num('ALERT_API_P95_MS', 3000);
+  private readonly svcApiErrorRate  = num('ALERT_API_ERROR_RATE', 5);          // %
+  private readonly svcPgConnPct     = num('ALERT_PG_CONNECTIONS_PCT', 90);     // % of max_connections
+  private readonly svcPgSlowQueries = num('ALERT_PG_SLOW_QUERIES', 10);
+  private readonly svcRedisMemPct   = num('ALERT_REDIS_MEMORY_PCT', 90);       // %
+  private readonly svcBullPending   = num('ALERT_BULLMQ_PENDING', 5000);
+  private readonly svcBullFailed    = num('ALERT_BULLMQ_FAILED', 25);
+  private readonly svcDockerRestarts = num('ALERT_DOCKER_RESTARTS', 5);
+  private readonly svcSshFailed     = num('ALERT_FAILED_SSH_ATTEMPTS', 25);
+  private readonly svcLoadPerCore   = num('ALERT_LOAD_PER_CORE', 2);
+  // "Lower is worse" metrics:
+  private readonly svcSslExpiryDays = num('ALERT_SSL_EXPIRY_DAYS', 7);
+  private readonly svcOrderSuccess  = num('ALERT_ORDER_SUCCESS_RATE', 95);     // %
+
   constructor(
     @Inject(PG_POOL) private readonly pool: Pool,
     private readonly rt: RealtimeGateway,
@@ -66,6 +82,8 @@ export class AlertEngineService {
   async evaluateSecurityEvent(serverId: string, e: SecurityEvent) {
     if (e.event_type === 'ssh_failed_login') {
       await this.evaluateSecurity(serverId, e.event_type);
+    } else if (e.event_type === 'service_metrics_snapshot') {
+      await this.evaluateServiceMetrics(serverId, e.raw);
     } else if (FPM_ALERT_TYPES.has(e.event_type)) {
       await this.raise(
         serverId,
@@ -76,6 +94,42 @@ export class AlertEngineService {
         e.message ?? e.event_type,
       );
     }
+  }
+
+  /**
+   * Promote breached service/application metrics to first-class alerts.
+   * Each metric dedups on (server_id, type) and auto-resolves once it recovers,
+   * so this is safe to call on every snapshot the agent ships.
+   */
+  async evaluateServiceMetrics(serverId: string, raw: Record<string, any> | null | undefined) {
+    if (!raw || typeof raw !== 'object') return;
+    const n = (v: any) => (typeof v === 'number' && isFinite(v) ? v : undefined);
+
+    await this.check(serverId, 'api_p95_high', n(raw.api_p95_ms), this.svcApiP95Ms, 'high',
+      (v) => `API p95 latency ${Math.round(v ?? 0)}ms`);
+    await this.check(serverId, 'api_error_rate_high', n(raw.api_error_rate), this.svcApiErrorRate, 'high',
+      (v) => `API error rate ${v?.toFixed(2)}%`);
+    await this.check(serverId, 'pg_connections_high', n(raw.pg_connections_pct), this.svcPgConnPct, 'high',
+      (v) => `PostgreSQL connections at ${v?.toFixed(0)}% of max`);
+    await this.check(serverId, 'pg_slow_queries', n(raw.pg_slow_queries), this.svcPgSlowQueries, 'medium',
+      (v) => `${v} slow PostgreSQL queries`);
+    await this.check(serverId, 'redis_memory_high', n(raw.redis_memory_pct), this.svcRedisMemPct, 'high',
+      (v) => `Redis memory at ${v?.toFixed(0)}%`);
+    await this.check(serverId, 'bullmq_pending_high', n(raw.bullmq_pending), this.svcBullPending, 'medium',
+      (v) => `${v} BullMQ jobs pending`);
+    await this.check(serverId, 'bullmq_failed_high', n(raw.bullmq_failed), this.svcBullFailed, 'high',
+      (v) => `${v} BullMQ jobs failed`);
+    await this.check(serverId, 'docker_restarts_high', n(raw.docker_restart_count), this.svcDockerRestarts, 'medium',
+      (v) => `Docker restart count ${v}`);
+    await this.check(serverId, 'ssh_failed_attempts_high', n(raw.failed_ssh_attempts), this.svcSshFailed, 'high',
+      (v) => `${v} failed SSH attempts`);
+    await this.check(serverId, 'load_high', n(raw.load_per_core), this.svcLoadPerCore, 'medium',
+      (v) => `Load ${v?.toFixed(2)}x per core`);
+
+    await this.checkLow(serverId, 'ssl_expiry_soon', n(raw.ssl_expiry_days), this.svcSslExpiryDays, 'critical',
+      (v) => `TLS certificate expires in ${v} day(s)`);
+    await this.checkLow(serverId, 'order_success_low', n(raw.order_success_rate), this.svcOrderSuccess, 'high',
+      (v) => `Order success rate ${v?.toFixed(1)}%`);
   }
 
   /** Detect SSH brute-force from recent failed logins. */
@@ -149,6 +203,23 @@ export class AlertEngineService {
   ) {
     if (value == null) return;
     if (value >= threshold) {
+      await this.raise(serverId, type, severity, threshold, value, msg(value));
+    } else {
+      await this.autoResolve(serverId, type);
+    }
+  }
+
+  /** Like check(), but for "lower is worse" metrics (e.g. cert days, success rate). */
+  private async checkLow(
+    serverId: string,
+    type: string,
+    value: number | undefined,
+    threshold: number,
+    severity: string,
+    msg: (v?: number) => string,
+  ) {
+    if (value == null) return;
+    if (value <= threshold) {
       await this.raise(serverId, type, severity, threshold, value, msg(value));
     } else {
       await this.autoResolve(serverId, type);
