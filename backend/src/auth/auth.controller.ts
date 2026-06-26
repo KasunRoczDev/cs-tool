@@ -8,6 +8,11 @@ class LoginDto {
   @IsString() password!: string;
 }
 
+class MfaDto {
+  @IsString() mfa_token!: string;
+  @IsString() code!: string;
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
@@ -15,6 +20,18 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto.email, dto.password);
+  }
+
+  // Step 2a: already-enrolled user submits their TOTP code.
+  @Post('mfa/verify')
+  verifyMfa(@Body() dto: MfaDto) {
+    return this.auth.verifyMfa(dto.mfa_token, dto.code);
+  }
+
+  // Step 2b: first-time user confirms the code shown by their authenticator app.
+  @Post('mfa/enroll')
+  enrollMfa(@Body() dto: MfaDto) {
+    return this.auth.enrollMfa(dto.mfa_token, dto.code);
   }
 
   // Returns the current authenticated user (from the JWT).

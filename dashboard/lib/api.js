@@ -56,6 +56,10 @@ async function req(path, opts = {}) {
 export const api = {
   login: (email, password) =>
     req('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  mfaVerify: (mfa_token, code) =>
+    req('/auth/mfa/verify', { method: 'POST', body: JSON.stringify({ mfa_token, code }) }),
+  mfaEnroll: (mfa_token, code) =>
+    req('/auth/mfa/enroll', { method: 'POST', body: JSON.stringify({ mfa_token, code }) }),
   me: () => req('/auth/me'),
   overview: () => req('/servers/overview'),
   servers: () => req('/servers'),

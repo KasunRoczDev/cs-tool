@@ -63,6 +63,15 @@ const bcrypt = require('bcryptjs');
     await client.query(fs.readFileSync(topologyPath, 'utf8'));
   }
 
+  // Apply MFA migration (idempotent — ADD COLUMN IF NOT EXISTS).
+  const mfaPath =
+    process.env.MFA_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/mfa_migration.sql');
+  if (fs.existsSync(mfaPath)) {
+    console.log('Applying mfa migration...');
+    await client.query(fs.readFileSync(mfaPath, 'utf8'));
+  }
+
   const email = process.env.ADMIN_EMAIL || 'admin@example.com';
   const password = process.env.ADMIN_PASSWORD || 'admin123';
   const hash = await bcrypt.hash(password, 10);

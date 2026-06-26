@@ -25,12 +25,18 @@ export class JwtAuthGuard implements CanActivate {
     if (!header?.startsWith('Bearer ')) {
       throw new UnauthorizedException('Missing bearer token');
     }
+    let payload: any;
     try {
-      const payload = this.jwt.verify(header.slice(7));
-      req.user = payload;
+      payload = this.jwt.verify(header.slice(7));
     } catch {
       throw new UnauthorizedException('Invalid or expired token');
     }
+    // Partial tokens (e.g. the MFA challenge token) carry a `scope` and must
+    // never be accepted as a full API session token.
+    if (payload.scope) {
+      throw new UnauthorizedException('Token not valid for API access');
+    }
+    req.user = payload;
 
     const required = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
       ctx.getHandler(),
