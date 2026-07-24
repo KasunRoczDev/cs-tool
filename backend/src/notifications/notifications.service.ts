@@ -3,6 +3,8 @@ import { Pool } from 'pg';
 import { PG_POOL } from '../database/database.module';
 import { EmailService, AlertEmailContext } from './email.service';
 import { DiscordService, AlertDiscordContext } from './discord.service';
+import { SlackService, EventMessage } from './slack.service';
+import { TeamsService } from './teams.service';
 import { CreateChannelDto, UpdateChannelDto, CreateRuleDto, UpdateRuleDto } from './dto';
 
 export interface AlertPayload {
@@ -26,6 +28,8 @@ export class NotificationsService {
     @Inject(PG_POOL) private readonly pool: Pool,
     private readonly email: EmailService,
     private readonly discord: DiscordService,
+    private readonly slack: SlackService,
+    private readonly teams: TeamsService,
   ) {}
 
   // ── Channels ─────────────────────────────────────────────────────────────
@@ -149,11 +153,94 @@ export class NotificationsService {
       await this.discord.sendTest(webhookUrl, ch.config?.username);
       return { sent: true, to: 'discord' };
     }
+    if (ch.type === 'slack') {
+      const webhookUrl = ch.config?.webhook_url;
+      if (!webhookUrl) throw new Error('Channel has no webhook_url configured');
+      await this.slack.sendTest(webhookUrl);
+      return { sent: true, to: 'slack' };
+    }
+    if (ch.type === 'teams') {
+      const webhookUrl = ch.config?.webhook_url;
+      if (!webhookUrl) throw new Error('Channel has no webhook_url configured');
+      await this.teams.sendTest(webhookUrl);
+      return { sent: true, to: 'teams' };
+    }
 
     const to = ch.config?.to;
     if (!to) throw new Error('Channel has no "to" email configured');
     await this.email.sendTest(to);
     return { sent: true, to };
+  }
+
+  // ── Platform event notifications (PR / release / deployment / hotfix) ───────
+
+  /**
+   * Fan a platform event out to every enabled channel subscribed to it.
+   * Subscription is stored on the channel: config.events = ['pr.merged', ...].
+   * Severity drives the colour/emoji in each sender.
+   */
+  async notifyEvent(
+    eventType: string,
+    msg: EventMessage,
+  ): Promise<{ notified: number }> {
+    const { rows: channels } = await this.pool.query(
+      `SELECT id, type, config
+         FROM notification_channels
+        WHERE enabled = TRUE
+          AND (config -> 'events') ? $1`,
+      [eventType],
+    );
+    let notified = 0;
+    for (const ch of channels) {
+      try {
+        const cfg = ch.config ?? {};
+        if (ch.type === 'email') {
+          if (cfg.to && (await this.email.isConfigured())) {
+            await this.email.sendEvent(cfg.to, cfg.cc, cfg.subject_prefix ?? '[Release]', msg);
+          } else continue;
+        } else if (ch.type === 'discord') {
+          if (!cfg.webhook_url) continue;
+          await this.discord.sendEvent(cfg.webhook_url, cfg.username, msg);
+        } else if (ch.type === 'slack') {
+          if (!cfg.webhook_url) continue;
+          await this.slack.sendEvent(cfg.webhook_url, msg);
+        } else if (ch.type === 'teams') {
+          if (!cfg.webhook_url) continue;
+          await this.teams.sendEvent(cfg.webhook_url, msg);
+        } else continue;
+        notified++;
+        await this.logEvent(ch.id, eventType, 'sent', null);
+      } catch (err: any) {
+        this.log.error(`Event notify failed (channel ${ch.id}, ${eventType}): ${err.message}`);
+        await this.logEvent(ch.id, eventType, 'failed', err.message);
+      }
+    }
+    return { notified };
+  }
+
+  /** Send a threaded email to explicit recipients (used for approval threads). */
+  async sendThreadedEmail(to: string[], subject: string, html: string, threadId: string) {
+    const recipients = (to || []).filter(Boolean);
+    if (recipients.length === 0) return { sent: false, reason: 'no recipients' };
+    if (!(await this.email.isConfigured())) return { sent: false, reason: 'SMTP not configured' };
+    try {
+      await this.email.sendThreaded(recipients, subject, html, threadId);
+      return { sent: true, count: recipients.length };
+    } catch (e: any) {
+      this.log.warn(`Threaded email failed: ${e.message}`);
+      return { sent: false, reason: e.message };
+    }
+  }
+
+  /** Write a platform-event delivery into notification_log (alert fields null). */
+  private async logEvent(channelId: string, event: string, status: string, error: string | null) {
+    await this.pool
+      .query(
+        `INSERT INTO notification_log (channel_id, event, status, error)
+         VALUES ($1, $2, $3, $4)`,
+        [channelId, event, status, error],
+      )
+      .catch((e) => this.log.warn(`Failed to write event log: ${e.message}`));
   }
 
   // ── Notification log ─────────────────────────────────────────────────────

@@ -14,6 +14,9 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { SettingsModule } from './settings/settings.module';
 import { AnalysisModule } from './analysis/analysis.module';
 import { TopologyModule } from './topology/topology.module';
+import { ReleaseModule } from './release/release.module';
+import { AiModule } from './ai/ai.module';
+import { AccessModule } from './access/access.module';
 
 @Module({
   imports: [
@@ -32,6 +35,9 @@ import { TopologyModule } from './topology/topology.module';
     SettingsModule,
     AnalysisModule,
     TopologyModule,
+    ReleaseModule,
+    AiModule,
+    AccessModule,
   ],
 })
 export class AppModule {}

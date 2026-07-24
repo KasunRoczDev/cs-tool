@@ -6,6 +6,14 @@ import { AppModule } from './app.module';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { cors: false });
 
+  if (!process.env.GITHUB_WEBHOOK_SECRET) {
+    new Logger('Bootstrap').warn(
+      'GITHUB_WEBHOOK_SECRET is not set — POST /api/v1/webhooks/github will accept ' +
+        'unsigned requests from anyone. Set it (repo → Settings → Webhooks → Secret) before ' +
+        'exposing this endpoint publicly.',
+    );
+  }
+
   app.use(helmet());
   app.enableCors({
     origin: process.env.DASHBOARD_ORIGIN?.split(',') ?? '*',

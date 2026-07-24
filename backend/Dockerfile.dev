@@ -1,0 +1,13 @@
+# Dev-runtime image: installs full deps (incl. devDeps) and runs Nest in watch mode.
+# Source is bind-mounted at runtime by docker-compose.dev.yml — no build/COPY of app code here.
+FROM node:22-slim
+WORKDIR /app
+# procps provides `ps`, which Nest's watch-mode restart (tree-kill) shells out to
+# when recompiling — missing on slim images, and its absence crashes the process
+# the moment a source file change triggers a restart.
+RUN apt-get update && apt-get install -y --no-install-recommends procps \
+  && rm -rf /var/lib/apt/lists/*
+COPY package.json ./
+RUN npm install
+EXPOSE 4000 9229
+CMD ["sh", "-c", "node scripts/migrate.js && npx nest start --watch --debug 0.0.0.0:9229"]

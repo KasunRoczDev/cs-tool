@@ -1,0 +1,76 @@
+%% Helm Platform — MVP Entity Relationship Diagram (blueprint Parts C & G)
+erDiagram
+  USER ||--o{ USER_ROLE_ASSIGNMENT : has
+  ROLE ||--o{ USER_ROLE_ASSIGNMENT : grants
+  ROLE ||--o{ ROLE_PERMISSION : bundles
+  PERMISSION ||--o{ ROLE_PERMISSION : in
+  USER ||--o{ API_TOKEN : owns
+
+  REPOSITORY ||--o{ BRANCH : contains
+  REPOSITORY ||--o{ BRANCH_PROTECTION_RULE : protects
+  REPOSITORY ||--o{ SERVICE_VERSION : versions
+  REPOSITORY ||--o{ VERSION_COMPATIBILITY : declares
+
+  RELEASE ||--o{ RELEASE_REPOSITORY : pins
+  REPOSITORY ||--o{ RELEASE_REPOSITORY : "pinned in"
+  RELEASE ||--o{ RELEASE_CHANNEL_HISTORY : transitions
+  RELEASE ||--o{ WORK_ITEM : includes
+  RELEASE ||--o{ DEPLOYMENT : deploys
+  RELEASE ||--o{ SCHEDULED_PROMOTION : schedules
+
+  WORK_ITEM ||--o{ DEPENDENCY : "blocks/blocked"
+  MERGE_REQUEST ||--o{ MERGE_APPROVAL : gathers
+  MERGE_REQUEST }o--|| REPOSITORY : on
+  MERGE_REQUEST }o--o| WORK_ITEM : implements
+  MERGE_REQUEST }o--o| RELEASE : "targets"
+
+  APPROVAL_POLICY ||--o{ APPROVAL_REQUEST : instantiates
+  APPROVAL_REQUEST ||--o{ APPROVAL_DECISION : collects
+  DEPLOYMENT }o--o| HEALTH_GATE : "guarded by (by channel)"
+  FREEZE_WINDOW }o--o{ RELEASE : "blocks promotion"
+
+  EVENT_OUTBOX ||..|| AUDIT_LOG : "relayed → consumed"
+  NOTIFICATION_CHANNEL ||..o{ OUTBOUND_WEBHOOK : "fan-out"
+
+  RELEASE {
+    uuid id PK
+    string version UK
+    string status "draft|canary|beta|production|enterprise|archived"
+    string channel
+    text release_notes_md
+  }
+  RELEASE_REPOSITORY {
+    uuid id PK
+    uuid release_id FK
+    uuid repository_id FK
+    string version
+    string commit_sha
+  }
+  REPOSITORY {
+    uuid id PK
+    string name
+    string provider
+    string provider_full_name
+    string default_branch
+  }
+  WORK_ITEM {
+    uuid id PK
+    string type "feature|bug|hotfix"
+    string status
+    uuid release_id FK
+  }
+  DEPLOYMENT {
+    uuid id PK
+    uuid release_id FK
+    string channel
+    string status
+    string rollback_target
+  }
+  AUDIT_LOG {
+    bigint id PK
+    string action
+    string entity_type
+    uuid entity_id
+    jsonb old_value
+    jsonb new_value
+  }

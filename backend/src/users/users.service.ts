@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import { PG_POOL } from '../database/database.module';
 
 const ROLES = ['admin', 'operator', 'viewer'];
+const APPROVAL_ROLES = ['qa', 'ba', 'dev_lead', 'tech_lead'];
 
 @Injectable()
 export class UsersService {
@@ -11,8 +12,27 @@ export class UsersService {
 
   list() {
     return this.pool
-      .query('SELECT id, email, role, created_at FROM users ORDER BY created_at')
+      .query(
+        `SELECT u.id, u.email, u.role, u.approval_role, u.product_id,
+                p.name AS product_name, u.created_at
+           FROM users u LEFT JOIN products p ON p.id = u.product_id
+          ORDER BY u.created_at`,
+      )
       .then((r) => r.rows);
+  }
+
+  /** Assign the approval role (QA/BA/DEV Lead/Tech Lead) and product for a user. */
+  async setApprovalProfile(id: string, approvalRole: string | null, productId: string | null) {
+    if (approvalRole && !APPROVAL_ROLES.includes(approvalRole)) {
+      throw new BadRequestException('Invalid approval role');
+    }
+    const { rows } = await this.pool.query(
+      `UPDATE users SET approval_role = $2, product_id = $3 WHERE id = $1
+       RETURNING id, email, role, approval_role, product_id`,
+      [id, approvalRole || null, productId || null],
+    );
+    if (!rows[0]) throw new NotFoundException('User not found');
+    return rows[0];
   }
 
   async create(email: string, password: string, role: string) {

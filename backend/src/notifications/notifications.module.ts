@@ -4,6 +4,8 @@ import { DatabaseModule } from '../database/database.module';
 import { SettingsModule } from '../settings/settings.module';
 import { EmailService } from './email.service';
 import { DiscordService } from './discord.service';
+import { SlackService } from './slack.service';
+import { TeamsService } from './teams.service';
 import { NotificationsService } from './notifications.service';
 import { NotificationsController } from './notifications.controller';
 
@@ -13,7 +15,7 @@ import { NotificationsController } from './notifications.controller';
     SettingsModule,
     JwtModule.register({ secret: process.env.JWT_SECRET ?? 'dev-secret' }),
   ],
-  providers: [EmailService, DiscordService, NotificationsService],
+  providers: [EmailService, DiscordService, SlackService, TeamsService, NotificationsService],
   controllers: [NotificationsController],
   exports: [NotificationsService],
 })

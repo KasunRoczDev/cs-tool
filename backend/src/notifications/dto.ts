@@ -25,10 +25,28 @@ export class DiscordConfig {
   @IsOptional() @IsString() username?: string; // bot display name, defaults to "Server Monitor"
 }
 
+export class WebhookConfig {
+  @IsString() webhook_url!: string;  // Slack / Microsoft Teams incoming webhook URL
+}
+
+/** Platform events a channel can subscribe to (stored in channel config.events). */
+export const PLATFORM_EVENTS = [
+  'pr.created',
+  'pr.merged',
+  'deployment.failed',
+  'deployment.successful',
+  'release.approved',
+  'release.approval_submitted',
+  'release.fully_approved',
+  'hotfix.created',
+] as const;
+
 export class CreateChannelDto {
   @IsString() name!: string;
   /** Supported channel types. */
-  @IsIn(['email', 'discord']) type!: string;
+  @IsIn(['email', 'discord', 'slack', 'teams']) type!: string;
+  // config: email {to,cc,subject_prefix} · discord/slack/teams {webhook_url,...}
+  // optional config.events: string[] — platform events this channel receives.
   @IsObject() config!: Record<string, any>;
   @IsOptional() @IsBoolean() enabled?: boolean;
 }

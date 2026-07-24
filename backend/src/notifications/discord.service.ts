@@ -43,6 +43,31 @@ export class DiscordService {
     }
   }
 
+  /** Post a platform event (PR/release/deployment/hotfix) as a Discord embed. */
+  async sendEvent(
+    webhookUrl: string,
+    username: string | undefined,
+    msg: { title: string; lines: string[]; severity?: string },
+  ): Promise<void> {
+    if (!this.isValidWebhook(webhookUrl)) throw new Error('Invalid Discord webhook URL');
+    const color =
+      { critical: 0xe53e3e, warning: 0xdd6b20, success: 0x38a169, info: 0x2f81f7 }[
+        msg.severity ?? 'info'
+      ] ?? 0x2f81f7;
+    await this.post(webhookUrl, {
+      username: username || 'Release & DevOps',
+      embeds: [
+        {
+          title: msg.title,
+          description: msg.lines.join('\n'),
+          color,
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    });
+    this.log.log(`Discord event posted — ${msg.title}`);
+  }
+
   async sendAlert(
     webhookUrl: string,
     username: string | undefined,

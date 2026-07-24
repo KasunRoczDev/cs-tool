@@ -72,6 +72,66 @@ const bcrypt = require('bcryptjs');
     await client.query(fs.readFileSync(mfaPath, 'utf8'));
   }
 
+  // Apply release-management migration (idempotent — IF NOT EXISTS / guarded
+  // enums). Must run after products + users exist, since repositories and
+  // releases reference them.
+  const releasePath =
+    process.env.RELEASE_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/release_migration.sql');
+  if (fs.existsSync(releasePath)) {
+    console.log('Applying release-management migration...');
+    await client.query(fs.readFileSync(releasePath, 'utf8'));
+  }
+
+  // Apply repo GitHub-token migration (idempotent — ADD COLUMN IF NOT EXISTS).
+  // Must run after release_migration.sql since it ALTERs the repositories table.
+  const repoTokenPath =
+    process.env.REPO_TOKEN_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/repo_github_token_migration.sql');
+  if (fs.existsSync(repoTokenPath)) {
+    console.log('Applying repo github-token migration...');
+    await client.query(fs.readFileSync(repoTokenPath, 'utf8'));
+  }
+
+  // Apply deploy-jobs migration (idempotent — IF NOT EXISTS). Must run after
+  // release_migration.sql (deployments) and schema.sql (servers).
+  const deployJobsPath =
+    process.env.DEPLOY_JOBS_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/deploy_jobs_migration.sql');
+  if (fs.existsSync(deployJobsPath)) {
+    console.log('Applying deploy-jobs migration...');
+    await client.query(fs.readFileSync(deployJobsPath, 'utf8'));
+  }
+
+  // Apply deploy-cancel migration (idempotent — ADD VALUE IF NOT EXISTS / IF NOT
+  // EXISTS index). Must run after deploy_jobs_migration.sql (deployments, channels).
+  const deployCancelPath =
+    process.env.DEPLOY_CANCEL_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/deploy_cancel_migration.sql');
+  if (fs.existsSync(deployCancelPath)) {
+    console.log('Applying deploy-cancel migration...');
+    await client.query(fs.readFileSync(deployCancelPath, 'utf8'));
+  }
+
+  // Apply release-approvals migration (idempotent). After releases + products + users.
+  const approvalsPath =
+    process.env.APPROVALS_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/release_approvals_migration.sql');
+  if (fs.existsSync(approvalsPath)) {
+    console.log('Applying release-approvals migration...');
+    await client.query(fs.readFileSync(approvalsPath, 'utf8'));
+  }
+
+  // Apply RBAC + release-status migration (idempotent). Must run LAST — after
+  // users, products, releases, approvals exist (it backfills from them).
+  const rbacPath =
+    process.env.RBAC_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/rbac_migration.sql');
+  if (fs.existsSync(rbacPath)) {
+    console.log('Applying RBAC + release-status migration...');
+    await client.query(fs.readFileSync(rbacPath, 'utf8'));
+  }
+
   const email = process.env.ADMIN_EMAIL || 'admin@example.com';
   const password = process.env.ADMIN_PASSWORD || 'admin123';
   const hash = await bcrypt.hash(password, 10);

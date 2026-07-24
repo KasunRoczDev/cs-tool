@@ -114,4 +114,116 @@ export const api = {
   topologyEnvs: (productId) => req(`/topology/${productId}/environments`),
   saveTopology: (productId, env, graph) =>
     req(`/topology/${productId}/${env}`, { method: 'PUT', body: JSON.stringify(graph) }),
+
+  // -- Release Management -------------------------------------------------
+  // Repositories + versions
+  repositories: () => req('/repositories'),
+  repository: (id) => req(`/repositories/${id}`),
+  createRepository: (body) => req('/repositories', { method: 'POST', body: JSON.stringify(body) }),
+  updateRepository: (id, body) => req(`/repositories/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteRepository: (id) => req(`/repositories/${id}`, { method: 'DELETE' }),
+  syncRepository: (id) => req(`/repositories/${id}/sync`, { method: 'POST' }),
+  repoBranches: (id) => req(`/repositories/${id}/branches`),
+  createBranch: (id, body) => req(`/repositories/${id}/branches`, { method: 'POST', body: JSON.stringify(body) }),
+  deleteBranch: (id, name) => req(`/repositories/${id}/branches${qs({ name })}`, { method: 'DELETE' }),
+  compareBranches: (id, base, head) => req(`/repositories/${id}/branches/compare${qs({ base, head })}`),
+  branchConflicts: (id, base, head) => req(`/repositories/${id}/branches/conflicts${qs({ base, head })}`),
+  branchHistory: (id, branch, limit = 50) => req(`/repositories/${id}/branches/history${qs({ branch, limit })}`),
+  repoCommits: (id, branch, limit = 50) => req(`/repositories/${id}/commits${qs({ branch, limit })}`),
+  repoVersions: (id) => req(`/repositories/${id}/versions`),
+  createRepoVersion: (id, body) => req(`/repositories/${id}/versions`, { method: 'POST', body: JSON.stringify(body) }),
+  // Releases
+  releases: () => req('/releases'),
+  release: (id) => req(`/releases/${id}`),
+  createRelease: (body) => req('/releases', { method: 'POST', body: JSON.stringify(body) }),
+  updateRelease: (id, body) => req(`/releases/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  addReleaseRepo: (id, body) => req(`/releases/${id}/repositories`, { method: 'POST', body: JSON.stringify(body) }),
+  removeReleaseRepo: (id, linkId) => req(`/releases/${id}/repositories/${linkId}`, { method: 'DELETE' }),
+  addReleaseItem: (id, body) => req(`/releases/${id}/items`, { method: 'POST', body: JSON.stringify(body) }),
+  removeReleaseItem: (id, itemId) => req(`/releases/${id}/items/${itemId}`, { method: 'DELETE' }),
+  promoteRelease: (id) => req(`/releases/${id}/promote`, { method: 'POST' }),
+  archiveRelease: (id) => req(`/releases/${id}/archive`, { method: 'POST' }),
+  generateReleaseNotes: (id) => req(`/releases/${id}/release-notes/generate`, { method: 'POST' }),
+  releaseNotes: (id) => req(`/releases/${id}/release-notes`),
+  // Deployments
+  channels: () => req('/channels'),
+  deployments: () => req('/deployments'),
+  deploymentBoard: () => req('/deployments/board'),
+  deploymentHistory: (id) => req(`/deployments/${id}/history`),
+  deploymentJobs: (id) => req(`/deployments/${id}/jobs`),
+  deployJobLog: (jobId) => req(`/deploy-jobs/${jobId}/log`),
+  // body: { channel, server_ids?, branch?, custom_commands? } (string allowed for back-compat)
+  deployRelease: (id, body) => req(`/releases/${id}/deployments`, {
+    method: 'POST',
+    body: JSON.stringify(typeof body === 'string' ? { channel: body } : body),
+  }),
+  approveDeployment: (id) => req(`/deployments/${id}/approve`, { method: 'POST' }),
+  rollbackDeployment: (id) => req(`/deployments/${id}/rollback`, { method: 'POST' }),
+  cancelDeployment: (id) => req(`/deployments/${id}/cancel`, { method: 'POST' }),
+  retryDeployment: (id) => req(`/deployments/${id}/retry`, { method: 'POST' }),
+  // ── AI Assistant ───────────────────────────────────────────────────────
+  aiStatus: () => req('/ai/status'),
+  aiRisk: (id, channel) => req(`/ai/releases/${id}/risk${qs({ channel })}`),
+  aiPredict: (id, channel) => req(`/ai/releases/${id}/predict${qs({ channel })}`),
+  aiRollbackPlan: (id, channel) => req(`/ai/releases/${id}/rollback-plan${qs({ channel })}`),
+  aiReleaseNotes: (id) => req(`/ai/releases/${id}/notes`),
+  aiRiskyPrs: (repoId) => req(`/ai/repositories/${repoId}/risky-prs`),
+  aiReviewers: (repoId, number) => req(`/ai/repositories/${repoId}/prs/${number}/reviewers`),
+  aiBreakingChanges: (repoId, number) => req(`/ai/repositories/${repoId}/prs/${number}/breaking-changes`),
+  aiIncidents: (hours) => req(`/ai/incidents${qs({ hours })}`),
+  // ── Release approvals ──────────────────────────────────────────────────
+  setUserApprovalProfile: (id, body) =>
+    req(`/users/${id}/approval-profile`, { method: 'PATCH', body: JSON.stringify(body) }),
+  releaseApprovals: (id) => req(`/releases/${id}/approvals`),
+  // Multipart submit (remark + optional attachment) — must NOT force JSON content-type.
+  submitApproval: async (id, formData) => {
+    const token = getToken();
+    const res = await fetch(`${BASE}/api/v1/releases/${id}/approvals`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (res.status === 401) {
+      setToken(null);
+      if (typeof window !== 'undefined') window.location.href = '/login';
+      throw new Error('Unauthorized');
+    }
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try { const j = await res.json(); if (j.message) msg = Array.isArray(j.message) ? j.message.join(', ') : j.message; } catch {}
+      throw new Error(msg);
+    }
+    return res.json();
+  },
+  // ── Access control (RBAC) ──────────────────────────────────────────────
+  myPermissions: (product) => req(`/me/permissions${qs({ product })}`),
+  permissions: () => req('/permissions'),
+  roles: () => req('/roles'),
+  createRole: (body) => req('/roles', { method: 'POST', body: JSON.stringify(body) }),
+  setRolePermissions: (id, permission_keys) => req(`/roles/${id}/permissions`, { method: 'PUT', body: JSON.stringify({ permission_keys }) }),
+  deleteRole: (id) => req(`/roles/${id}`, { method: 'DELETE' }),
+  productMembers: (id) => req(`/products/${id}/members`),
+  addProductMember: (id, body) => req(`/products/${id}/members`, { method: 'POST', body: JSON.stringify(body) }),
+  revokeMembership: (id) => req(`/memberships/${id}`, { method: 'DELETE' }),
+  grantMembership: (body) => req('/memberships', { method: 'POST', body: JSON.stringify(body) }),
+  // ── Release status state machine ───────────────────────────────────────
+  workflows: () => req('/workflows'),
+  releaseBoard: () => req('/release-board'),
+  releaseStatus: (id) => req(`/releases/${id}/status`),
+  releaseStatusHistory: (id) => req(`/releases/${id}/status-history`),
+  transitionRelease: (id, to_status_key, note) => req(`/releases/${id}/transition`, { method: 'POST', body: JSON.stringify({ to_status_key, note }) }),
+  // Authenticated attachment download → triggers a browser save.
+  downloadApprovalAttachment: async (attId, filename) => {
+    const token = getToken();
+    const res = await fetch(`${BASE}/api/v1/approval-attachments/${attId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`Download failed (HTTP ${res.status})`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename || 'attachment';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  },
 };

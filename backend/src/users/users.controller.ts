@@ -1,7 +1,7 @@
 import {
   Body, Controller, Delete, Get, Param, Patch, Post, Req, UseGuards,
 } from '@nestjs/common';
-import { IsEmail, IsIn, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsOptional, IsString, MinLength } from 'class-validator';
 import { JwtAuthGuard, Roles } from '../common/jwt-auth.guard';
 import { UsersService } from './users.service';
 
@@ -15,6 +15,10 @@ class SetRoleDto {
 }
 class SetPasswordDto {
   @IsString() @MinLength(6) password!: string;
+}
+class ApprovalProfileDto {
+  @IsOptional() @IsIn(['qa', 'ba', 'dev_lead', 'tech_lead', '']) approval_role?: string;
+  @IsOptional() @IsString() product_id?: string;
 }
 
 @UseGuards(JwtAuthGuard)
@@ -42,6 +46,14 @@ export class UsersController {
   async setRole(@Req() req: any, @Param('id') id: string, @Body() dto: SetRoleDto) {
     const u = await this.users.setRole(id, dto.role);
     await this.users.audit(req.user.sub, 'user.setRole', id, { role: dto.role });
+    return u;
+  }
+
+  @Roles('admin')
+  @Patch(':id/approval-profile')
+  async setApprovalProfile(@Req() req: any, @Param('id') id: string, @Body() dto: ApprovalProfileDto) {
+    const u = await this.users.setApprovalProfile(id, dto.approval_role || null, dto.product_id || null);
+    await this.users.audit(req.user.sub, 'user.setApprovalProfile', id, dto);
     return u;
   }
 

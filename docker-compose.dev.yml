@@ -1,0 +1,51 @@
+# Dev-runtime override: hot-reload + debugger, no image rebuild needed for source changes.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+#   (--build only needed the first time and whenever package.json changes)
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    # Base compose mounts individual ./database/*.sql files under /app/database, which would be
+    # shadowed by the full source bind mount below. Mount the whole folder at a separate path
+    # instead and point the migration env vars at it.
+    environment:
+      # Docker Desktop's bind mounts (esp. on Windows) don't reliably emit inotify
+      # events, so tsc's default file watcher can miss host-side edits. Force polling.
+      TSC_WATCHFILE: DynamicPriorityPolling
+      TSC_WATCHDIRECTORY: DynamicPriorityPolling
+      SCHEMA_PATH: /database/schema.sql
+      PRODUCTS_MIGRATION_PATH: /database/products_migration.sql
+      SETTINGS_MIGRATION_PATH: /database/settings_migration.sql
+      NOTIF_MIGRATION_PATH: /database/notifications_migration.sql
+      TOPOLOGY_MIGRATION_PATH: /database/topology_migration.sql
+      MFA_MIGRATION_PATH: /database/mfa_migration.sql
+      RELEASE_MIGRATION_PATH: /database/release_migration.sql
+      REPO_TOKEN_MIGRATION_PATH: /database/repo_github_token_migration.sql
+      DEPLOY_JOBS_MIGRATION_PATH: /database/deploy_jobs_migration.sql
+      APPROVALS_MIGRATION_PATH: /database/release_approvals_migration.sql
+      RBAC_MIGRATION_PATH: /database/rbac_migration.sql
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+      - ./database:/database:ro
+    ports:
+      - "8089:9229"
+    # Overrides the base file's prod command (migrate + node dist/main.js).
+    command: sh -c "node scripts/migrate.js && npx nest start --watch --debug 0.0.0.0:9230"
+
+  dashboard:
+    # No debug port here: Next 14's dev server crashes if its inspector is bound to
+    # anything other than 127.0.0.1 (its internal router-server child process mis-parses
+    # the host), so a host-reachable debugger isn't viable without extra plumbing.
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile.dev
+    environment:
+      # Same bind-mount file-watching gap as backend — force webpack/chokidar to poll.
+      WATCHPACK_POLLING: "true"
+      CHOKIDAR_USEPOLLING: "true"
+    volumes:
+      - ./dashboard:/app
+      - /app/node_modules
+      - /app/.next

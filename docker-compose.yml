@@ -27,6 +27,19 @@ services:
       SETTINGS_MIGRATION_PATH: /app/database/settings_migration.sql
       NOTIF_MIGRATION_PATH: /app/database/notifications_migration.sql
       TOPOLOGY_MIGRATION_PATH: /app/database/topology_migration.sql
+      MFA_MIGRATION_PATH: /app/database/mfa_migration.sql
+      RELEASE_MIGRATION_PATH: /app/database/release_migration.sql
+      REPO_TOKEN_MIGRATION_PATH: /app/database/repo_github_token_migration.sql
+      DEPLOY_JOBS_MIGRATION_PATH: /app/database/deploy_jobs_migration.sql
+      APPROVALS_MIGRATION_PATH: /app/database/release_approvals_migration.sql
+      RBAC_MIGRATION_PATH: /app/database/rbac_migration.sql
+      # Key used to encrypt per-repo GitHub tokens at rest (AES-256-GCM).
+      # Change this to a long random string; rotating it invalidates stored tokens.
+      TOKEN_ENC_KEY: change-me-to-a-long-random-token-encryption-key
+      # ── AI Assistant LLM enrichment (optional — scores work without it) ──
+      # AI_PROVIDER: anthropic        # or: openai
+      # AI_API_KEY: your-llm-api-key
+      # AI_MODEL: claude-3-5-haiku-latest   # or: gpt-4o-mini
       # ── Email notifications (set these to enable) ──────────────────────
       # SMTP_HOST: smtp.example.com
       # SMTP_PORT: 587
@@ -43,6 +56,12 @@ services:
       - ./database/notifications_migration.sql:/app/database/notifications_migration.sql:ro
       - ./database/settings_migration.sql:/app/database/settings_migration.sql:ro
       - ./database/topology_migration.sql:/app/database/topology_migration.sql:ro
+      - ./database/mfa_migration.sql:/app/database/mfa_migration.sql:ro
+      - ./database/release_migration.sql:/app/database/release_migration.sql:ro
+      - ./database/repo_github_token_migration.sql:/app/database/repo_github_token_migration.sql:ro
+      - ./database/deploy_jobs_migration.sql:/app/database/deploy_jobs_migration.sql:ro
+      - ./database/release_approvals_migration.sql:/app/database/release_approvals_migration.sql:ro
+      - ./database/rbac_migration.sql:/app/database/rbac_migration.sql:ro
     depends_on:
       db:
         condition: service_healthy

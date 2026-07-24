@@ -17,6 +17,17 @@ send_interval: 30
 metrics: true
 security_logs: true
 
+# Release deployments — the agent pulls release jobs the platform targets at
+# THIS server and runs scripts/deploy-release.sh (fetch → checkout → install →
+# build → migrate → restart → health check → custom commands), reporting per-step
+# status back. Enable only on servers that should run OMS releases.
+deploy:
+  enabled: false
+  poll_interval: 15                       # seconds between job polls
+  base_dir: /var/www/release-env          # <base>/<env>/<repo> app layout
+  script: /opt/monitor-agent/scripts/deploy-release.sh
+  healthcheck_url: ""                      # optional URL probed as the final step
+
 # TLS verification — keep true in production. Set false only for self-signed lab certs.
 tls_verify: true
 

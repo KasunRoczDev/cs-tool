@@ -9,6 +9,7 @@ const { collectFpmAsEvents } = require('./collectors/fpm');
 const { startSecurity } = require('./collectors/security');
 const { startLynis } = require('./collectors/lynis');
 const { Sender } = require('./sender');
+const { DeployRunner } = require('./deploy');
 
 const CONFIG_PATH =
   process.env.MONITOR_CONFIG || '/etc/monitor-agent/agent.yaml';
@@ -79,6 +80,12 @@ function main() {
     sender.flush().catch((e) => console.warn(`[agent] flush error: ${e.message}`));
   }, cfg.send_interval * 1000);
 
+  // Deploy runner: pulls and executes release jobs targeted at this server.
+  let stopDeploy = () => {};
+  if (cfg.deploy && cfg.deploy.enabled) {
+    stopDeploy = new DeployRunner(cfg).start();
+  }
+
   const shutdown = async (sig) => {
     console.log(`[agent] ${sig} received, flushing...`);
     clearInterval(metricsTimer);
@@ -86,6 +93,7 @@ function main() {
     clearInterval(snapshotTimer);
     stopSecurity();
     stopLynis();
+    stopDeploy();
     await sender.flush().catch(() => {});
     process.exit(0);
   };

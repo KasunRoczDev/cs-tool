@@ -1,0 +1,27 @@
+%% Sequence — Hotfix auto-create + merge-back, blueprint C.9.1 / J.4
+sequenceDiagram
+  autonumber
+  actor Dev as Developer
+  participant API as helm-api (Hotfix)
+  participant HS as HotfixService
+  participant REG as ProviderRegistry
+  participant GH as GitHubAdapter
+  participant DB as PostgreSQL (tx + outbox)
+  participant BUS as Event Bus
+
+  Dev->>API: POST /hotfixes {repo, base_channel: production, title}
+  API->>API: PermissionGuard: hotfix.create?
+  API->>HS: createHotfix(ctx, dto)
+  HS->>DB: find production ServiceVersion (tag + sha)
+  HS->>REG: for("github")
+  REG-->>HS: GitHubAdapter
+  HS->>GH: createBranch(hotfix/x.y.z-fix, fromSha=prod tag)
+  HS->>DB: BEGIN
+  HS->>DB: INSERT work_item(type=hotfix, priority=critical)
+  HS->>DB: compute merge-back targets = main + all active release/*
+  HS->>DB: INSERT outbox(hotfix.created {mergeBackTargets})
+  HS->>DB: COMMIT
+  HS-->>API: {workItem, hotfixBranch, mergeBackTargets}
+  API-->>Dev: 201 Created
+  Note over HS,GH: completeHotfix() later opens + merges PRs into<br/>main AND every active release/* (no fix lost)
+  BUS-->>BUS: hotfix.created → notify + audit

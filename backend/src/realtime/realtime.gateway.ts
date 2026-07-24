@@ -49,4 +49,13 @@ export class RealtimeGateway implements OnGatewayConnection {
   emitServerStatus(payload: unknown) {
     this.server.to('all').emit('server_status', payload);
   }
+
+  /**
+   * Release-management realtime channel. The dashboard listens for
+   * 'release_event' to live-update the releases list and the deployment
+   * pipeline board. `type` is e.g. release.promoted / deployment.succeeded.
+   */
+  emitReleaseEvent(type: string, payload: unknown) {
+    this.server.to('all').emit('release_event', { type, payload });
+  }
 }

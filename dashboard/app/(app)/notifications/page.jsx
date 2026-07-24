@@ -15,6 +15,22 @@ const ALERT_TYPES = [
 const SEVERITIES = ['low', 'medium', 'high', 'critical'];
 const SEV_COLORS = { low: '#34d399', medium: '#fbbf24', high: '#fb923c', critical: '#f87171' };
 
+// Platform events a channel can subscribe to (release/deployment/PR/hotfix).
+const PLATFORM_EVENTS = [
+  { key: 'pr.created', label: 'PR created' },
+  { key: 'pr.merged', label: 'PR merged' },
+  { key: 'deployment.successful', label: 'Deployment successful' },
+  { key: 'deployment.failed', label: 'Deployment failed' },
+  { key: 'release.approved', label: 'Release approved' },
+  { key: 'hotfix.created', label: 'Hotfix created' },
+];
+const WEBHOOK_TYPES = ['discord', 'slack', 'teams'];
+const WEBHOOK_HELP = {
+  discord: 'Discord: Channel → Edit Channel → Integrations → Webhooks → New Webhook → Copy URL.',
+  slack: 'Slack: create an Incoming Webhook app and paste the https://hooks.slack.com/services/… URL.',
+  teams: 'Teams: channel → ⋯ → Connectors → Incoming Webhook (or Workflows) → copy the URL.',
+};
+
 const STATUS_COLORS = { sent: '#34d399', failed: '#f87171', suppressed: '#94a3b8' };
 
 function SevPill({ s }) {
@@ -40,37 +56,42 @@ function StatusDot({ s }) {
 function ChannelForm({ initial, onSave, onCancel }) {
   const [form, setForm] = useState(initial ?? {
     name: '', type: 'email', to: '', cc: '', subject_prefix: '[Monitor Alert]',
-    webhook_url: '', username: 'Server Monitor', enabled: true,
+    webhook_url: '', username: 'Server Monitor', events: [], enabled: true,
   });
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
-  const isDiscord = form.type === 'discord';
+  const isWebhook = WEBHOOK_TYPES.includes(form.type);
+
+  const toggleEvent = (key) => setForm((f) => ({
+    ...f,
+    events: f.events.includes(key) ? f.events.filter((e) => e !== key) : [...f.events, key],
+  }));
 
   const save = async () => {
     if (!form.name.trim()) return setErr('Name is required');
-    if (isDiscord) {
-      if (!form.webhook_url.trim()) return setErr('Discord webhook URL is required');
+    if (isWebhook) {
+      if (!form.webhook_url.trim()) return setErr(`${form.type} webhook URL is required`);
     } else if (!form.to.trim()) {
       return setErr('Recipient email is required');
     }
     setSaving(true); setErr('');
     try {
-      const body = isDiscord
+      const events = form.events?.length ? form.events : undefined;
+      const config = isWebhook
         ? {
-            name: form.name,
-            type: 'discord',
-            config: { webhook_url: form.webhook_url.trim(), username: form.username || undefined },
-            enabled: form.enabled,
+            webhook_url: form.webhook_url.trim(),
+            ...(form.type === 'discord' ? { username: form.username || undefined } : {}),
+            events,
           }
         : {
-            name: form.name,
-            type: 'email',
-            config: { to: form.to, cc: form.cc || undefined, subject_prefix: form.subject_prefix || '[Monitor Alert]' },
-            enabled: form.enabled,
+            to: form.to,
+            cc: form.cc || undefined,
+            subject_prefix: form.subject_prefix || '[Monitor Alert]',
+            events,
           };
-      await onSave(body);
+      await onSave({ name: form.name, type: form.type, config, enabled: form.enabled });
     } catch (e) { setErr(e.message); }
     setSaving(false);
   };
@@ -90,24 +111,26 @@ function ChannelForm({ initial, onSave, onCancel }) {
           <select value={form.type} onChange={(e) => set('type', e.target.value)} disabled={!!initial}>
             <option value="email">Email</option>
             <option value="discord">Discord</option>
+            <option value="slack">Slack</option>
+            <option value="teams">Microsoft Teams</option>
           </select>
         </label>
 
-        {isDiscord ? (
+        {isWebhook ? (
           <>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
-              Discord webhook URL
+              {form.type === 'teams' ? 'Microsoft Teams' : form.type === 'slack' ? 'Slack' : 'Discord'} webhook URL
               <input value={form.webhook_url} onChange={(e) => set('webhook_url', e.target.value)}
-                placeholder="https://discord.com/api/webhooks/…" />
+                placeholder="https://…" />
             </label>
-            <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
-              Bot display name (optional)
-              <input value={form.username} onChange={(e) => set('username', e.target.value)}
-                placeholder="Server Monitor" />
-            </label>
-            <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-              In Discord: Channel → Edit Channel → Integrations → Webhooks → New Webhook → Copy Webhook URL.
-            </div>
+            {form.type === 'discord' && (
+              <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
+                Bot display name (optional)
+                <input value={form.username} onChange={(e) => set('username', e.target.value)}
+                  placeholder="Server Monitor" />
+              </label>
+            )}
+            <div style={{ fontSize: 12, color: 'var(--muted)' }}>{WEBHOOK_HELP[form.type]}</div>
           </>
         ) : (
           <>
@@ -128,6 +151,21 @@ function ChannelForm({ initial, onSave, onCancel }) {
             </label>
           </>
         )}
+
+        {/* Release/DevOps event subscriptions */}
+        <div style={{ fontSize: 13 }}>
+          <div style={{ marginBottom: 6, color: 'var(--muted)' }}>
+            Release &amp; DevOps events to notify (in addition to alert rules)
+          </div>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            {PLATFORM_EVENTS.map((ev) => (
+              <label key={ev.key} style={{ display: 'flex', alignItems: 'center', gap: 5, cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.events?.includes(ev.key)} onChange={() => toggleEvent(ev.key)} />
+                {ev.label}
+              </label>
+            ))}
+          </div>
+        </div>
 
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
           <input type="checkbox" checked={form.enabled} onChange={(e) => set('enabled', e.target.checked)} />
@@ -314,8 +352,8 @@ export default function NotificationsPage() {
     setTesting(ch.id);
     try {
       await api.testChannel(ch.id);
-      notify(ch.type === 'discord'
-        ? 'Test message posted to Discord'
+      notify(['discord', 'slack', 'teams'].includes(ch.type)
+        ? `Test message posted to ${ch.type}`
         : `Test email sent to ${ch.config?.to}`);
     } catch (e) { notify(`Test failed: ${e.message}`); }
     setTesting(null);
@@ -369,6 +407,7 @@ export default function NotificationsPage() {
     subject_prefix: editChannel.config?.subject_prefix ?? '[Monitor Alert]',
     webhook_url: editChannel.config?.webhook_url ?? '',
     username: editChannel.config?.username ?? 'Server Monitor',
+    events: editChannel.config?.events ?? [],
     enabled: editChannel.enabled,
   } : null;
 
@@ -452,7 +491,7 @@ export default function NotificationsPage() {
                         color: 'var(--muted)', textTransform: 'capitalize',
                       }}>{ch.type ?? 'email'}</span>
                     </div>
-                    {ch.type === 'discord' ? (
+                    {WEBHOOK_TYPES.includes(ch.type) ? (
                       <>
                         <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
                           Webhook: <span style={{ color: 'var(--fg)' }}>
@@ -460,8 +499,8 @@ export default function NotificationsPage() {
                           </span>
                         </div>
                         <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                          As: {ch.config?.username ?? 'Server Monitor'}
-                          &nbsp;·&nbsp; {ch.rule_count ?? 0} rule{ch.rule_count !== 1 ? 's' : ''}
+                          {ch.type === 'discord' && <>As: {ch.config?.username ?? 'Server Monitor'} &nbsp;·&nbsp; </>}
+                          {ch.rule_count ?? 0} rule{ch.rule_count !== 1 ? 's' : ''}
                         </div>
                       </>
                     ) : (
@@ -475,6 +514,11 @@ export default function NotificationsPage() {
                           &nbsp;·&nbsp; {ch.rule_count ?? 0} rule{ch.rule_count !== 1 ? 's' : ''}
                         </div>
                       </>
+                    )}
+                    {ch.config?.events?.length > 0 && (
+                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                        Events: <span style={{ color: 'var(--fg)' }}>{ch.config.events.join(', ')}</span>
+                      </div>
                     )}
                   </div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>

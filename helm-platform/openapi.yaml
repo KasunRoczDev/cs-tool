@@ -1,0 +1,366 @@
+openapi: 3.1.0
+info:
+  title: Helm — Release & DevOps Management Platform API
+  version: "1.0.0"
+  description: >
+    Machine-readable contract for the MVP (blueprint Part H). The release is the
+    aggregate root; channels are promotion state. All mutations enforce RBAC, accept
+    Idempotency-Key, use If-Match for optimistic concurrency, and emit domain events.
+servers:
+  - url: https://helm.storemate.internal/api/v1
+security:
+  - bearerAuth: []
+tags:
+  - { name: Repositories } 
+  - { name: Branches }
+  - { name: Versions }
+  - { name: WorkItems }
+  - { name: Hotfixes }
+  - { name: Releases }
+  - { name: Merges }
+  - { name: Deployments }
+  - { name: Governance }
+  - { name: Platform }
+paths:
+  /repositories:
+    get:
+      tags: [Repositories]
+      summary: List repositories
+      parameters:
+        - { name: provider, in: query, schema: { type: string } }
+        - { name: active, in: query, schema: { type: boolean } }
+        - { name: q, in: query, schema: { type: string } }
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Repository' } } } } }
+    post:
+      tags: [Repositories]
+      summary: Register a repository
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RepositoryCreate' } } } }
+      responses:
+        "201": { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Repository' } } } }
+        "403": { $ref: '#/components/responses/Forbidden' }
+      x-required-permission: repository.manage
+  /repositories/import:
+    post:
+      tags: [Repositories]
+      summary: Bulk-import repositories from a provider installation
+      requestBody:
+        required: true
+        content: { application/json: { schema: { type: object, required: [provider, installation_id, repo_full_names],
+          properties: { provider: { type: string }, installation_id: { type: string },
+          repo_full_names: { type: array, items: { type: string } } } } } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: object, properties: { imported: { type: integer } } } } } } }
+      x-required-permission: repository.manage
+  /repositories/{id}:
+    get:
+      tags: [Repositories]
+      summary: Get a repository
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Repository' } } } }
+        "404": { $ref: '#/components/responses/NotFound' }
+  /repositories/{id}/branches:
+    get:
+      tags: [Branches]
+      summary: List branches
+      parameters: [ { $ref: '#/components/parameters/Id' }, { name: type, in: query, schema: { type: string, enum: [main, feature, bugfix, hotfix, release] } } ]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Branch' } } } } } }
+    post:
+      tags: [Branches]
+      summary: Create a branch
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [name, type], properties:
+        { name: { type: string }, type: { type: string }, from_sha: { type: string } } } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Branch' } } } } }
+      x-required-permission: branch.create
+  /repositories/{id}/branches/compare:
+    get:
+      tags: [Branches]
+      summary: Compare two branches (ahead/behind + files)
+      parameters: [ { $ref: '#/components/parameters/Id' }, { name: base, in: query, required: true, schema: { type: string } }, { name: head, in: query, required: true, schema: { type: string } } ]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Comparison' } } } } }
+  /work-items:
+    get:
+      tags: [WorkItems]
+      summary: List work items (features / bugs / hotfixes)
+      parameters:
+        - { name: type, in: query, schema: { type: string, enum: [feature, bug, hotfix] } }
+        - { name: status, in: query, schema: { type: string } }
+        - { name: release, in: query, schema: { type: string, format: uuid } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/WorkItem' } } } } } }
+    post:
+      tags: [WorkItems]
+      summary: Create a work item
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/WorkItemCreate' } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/WorkItem' } } } } }
+      x-required-permission: workitem.create
+  /hotfixes:
+    post:
+      tags: [Hotfixes]
+      summary: Create a hotfix (auto-branch + merge-back targets)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [repository_id, base_channel, title, developer_id], properties:
+        { repository_id: { type: string, format: uuid }, base_channel: { type: string }, title: { type: string }, developer_id: { type: string, format: uuid } } } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { type: object, properties:
+        { workItem: { $ref: '#/components/schemas/WorkItem' }, hotfixBranch: { type: string }, mergeBackTargets: { type: array, items: { type: string } } } } } } } }
+      x-required-permission: hotfix.create
+  /releases:
+    get:
+      tags: [Releases]
+      summary: List releases
+      parameters: [ { name: status, in: query, schema: { type: string } }, { name: channel, in: query, schema: { type: string } } ]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Release' } } } } } }
+    post:
+      tags: [Releases]
+      summary: Create a release (draft)
+      parameters: [ { $ref: '#/components/parameters/IdempotencyKey' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [version], properties:
+        { version: { type: string }, name: { type: string } } } } } }
+      responses: { "201": { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/Release' } } } } }
+      x-required-permission: release.create
+  /releases/{id}:
+    get:
+      tags: [Releases]
+      summary: Get release aggregate (repos, work items, deployments, history)
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      responses:
+        "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/ReleaseDetail' } } } }
+        "404": { $ref: '#/components/responses/NotFound' }
+  /releases/{id}/repositories:
+    post:
+      tags: [Releases]
+      summary: Pin a repository (version + commit SHA) into the release
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [repository_id, version, commit_sha], properties:
+        { repository_id: { type: string, format: uuid }, version: { type: string }, commit_sha: { type: string }, branch_name: { type: string } } } } } }
+      responses: { "201": { description: Created } }
+      x-required-permission: release.edit
+  /releases/{id}/preflight:
+    get:
+      tags: [Releases]
+      summary: Run all promotion gate checks; report pass/fail per check
+      parameters: [ { $ref: '#/components/parameters/Id' }, { name: to_channel, in: query, schema: { type: string } } ]
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/Preflight' } } } } }
+  /releases/{id}/promote:
+    post:
+      tags: [Releases]
+      summary: Promote to the next channel (gated by RBAC, approvals, freeze, preflight)
+      parameters: [ { $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IfMatch' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [to_channel], properties:
+        { to_channel: { type: string, enum: [canary, beta, production, enterprise] } } } } } }
+      responses:
+        "200": { description: Promoted }
+        "403": { $ref: '#/components/responses/Forbidden' }
+        "409": { $ref: '#/components/responses/Conflict' }
+        "422": { $ref: '#/components/responses/Unprocessable' }
+      x-required-permission: deploy.approve.{channel}
+  /releases/{id}/rollback:
+    post:
+      tags: [Releases]
+      summary: Roll back to a previous release
+      parameters: [ { $ref: '#/components/parameters/Id' } ]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [to_release_id], properties:
+        { to_release_id: { type: string, format: uuid }, reason: { type: string } } } } } }
+      responses: { "200": { description: Rolled back } }
+      x-required-permission: deploy.rollback
+  /merges:
+    get:
+      tags: [Merges]
+      summary: List merge requests
+      parameters: [ { name: state, in: query, schema: { type: string, enum: [pending, conflict, approved, merged, closed] } } ]
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/MergeRequest' } } } } } }
+  /merges/{id}/merge:
+    post:
+      tags: [Merges]
+      summary: One-click merge (guards approval + mergeable + no conflicts)
+      parameters: [ { $ref: '#/components/parameters/Id' }, { $ref: '#/components/parameters/IdempotencyKey' } ]
+      responses: { "200": { description: Merged }, "409": { $ref: '#/components/responses/Conflict' } }
+      x-required-permission: merge.execute
+  /deployments/dashboard:
+    get:
+      tags: [Deployments]
+      summary: Channel pipeline state (Canary -> Beta -> Production -> Enterprise)
+      responses: { "200": { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/DeploymentDashboard' } } } } }
+  /approval-policies:
+    get: { tags: [Governance], summary: List approval policies, responses: { "200": { description: OK } } }
+    post:
+      tags: [Governance]
+      summary: Create an approval policy
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ApprovalPolicy' } } } }
+      responses: { "201": { description: Created } }
+      x-required-permission: admin
+  /audit-logs:
+    get:
+      tags: [Platform]
+      summary: Query the append-only audit log
+      parameters:
+        - { name: entity, in: query, schema: { type: string } }
+        - { name: actor, in: query, schema: { type: string } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+      responses: { "200": { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/AuditLog' } } } } } }
+      x-required-permission: audit.read
+  /webhooks/{provider}:
+    post:
+      tags: [Platform]
+      summary: Inbound provider webhook (HMAC-verified)
+      security: []
+      parameters: [ { name: provider, in: path, required: true, schema: { type: string } } ]
+      responses: { "202": { description: Accepted } }
+  /status:
+    get: { tags: [Platform], summary: Aggregated platform + dependency health, security: [], responses: { "200": { description: OK } } }
+  /healthz:
+    get: { tags: [Platform], summary: Liveness, security: [], responses: { "200": { description: OK } } }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, required: false, schema: { type: string } }
+    IfMatch: { name: If-Match, in: header, required: false, schema: { type: string }, description: Optimistic concurrency (ETag) }
+  responses:
+    NotFound: { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Forbidden: { description: Forbidden, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Conflict: { description: Conflict / freeze active / version mismatch, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Unprocessable: { description: Preflight failed, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string, examples: [release_not_promotable, forbidden, freeze_active, approval_required, version_mismatch] }
+            message: { type: string }
+            details: {}
+    Repository:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        slug: { type: string }
+        provider: { type: string, enum: [github, gitlab, bitbucket] }
+        providerFullName: { type: string }
+        defaultBranch: { type: string }
+        techStack: { type: array, items: { type: string } }
+        dockerImageName: { type: string }
+        containerRegistry: { type: string }
+        isActive: { type: boolean }
+        syncStatus: { type: string }
+    RepositoryCreate:
+      type: object
+      required: [name, slug, providerFullName]
+      properties:
+        name: { type: string }
+        slug: { type: string }
+        provider: { type: string }
+        providerFullName: { type: string }
+        defaultBranch: { type: string }
+        techStack: { type: array, items: { type: string } }
+        dockerImageName: { type: string }
+        containerRegistry: { type: string }
+    Branch:
+      type: object
+      properties:
+        name: { type: string }
+        type: { type: string }
+        headSha: { type: string }
+        aheadOfMain: { type: integer }
+        behindMain: { type: integer }
+        isProtected: { type: boolean }
+    Comparison:
+      type: object
+      properties: { aheadBy: { type: integer }, behindBy: { type: integer }, files: { type: array, items: { type: string } } }
+    WorkItem:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [feature, bug, hotfix] }
+        refCode: { type: string }
+        title: { type: string }
+        priority: { type: string }
+        status: { type: string, enum: [open, in_review, merged, verified, released] }
+        deploymentStatus: { type: string }
+        releaseId: { type: string, format: uuid }
+    WorkItemCreate:
+      type: object
+      required: [type, title]
+      properties:
+        type: { type: string, enum: [feature, bug, hotfix] }
+        title: { type: string }
+        repository_id: { type: string, format: uuid }
+        branch_name: { type: string }
+        priority: { type: string }
+    Release:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        version: { type: string }
+        name: { type: string }
+        status: { type: string, enum: [draft, canary, beta, production, enterprise, archived] }
+        channel: { type: string }
+    ReleaseDetail:
+      allOf:
+        - $ref: '#/components/schemas/Release'
+        - type: object
+          properties:
+            repositories:
+              type: array
+              items:
+                type: object
+                properties: { repositoryId: { type: string, format: uuid }, version: { type: string }, commitSha: { type: string } }
+            workItems: { type: array, items: { $ref: '#/components/schemas/WorkItem' } }
+    Preflight:
+      type: object
+      properties:
+        ok: { type: boolean }
+        checks:
+          type: array
+          items:
+            type: object
+            properties: { name: { type: string }, ok: { type: boolean }, detail: {} }
+    MergeRequest:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        repositoryId: { type: string, format: uuid }
+        providerPrNumber: { type: integer }
+        sourceBranch: { type: string }
+        targetBranch: { type: string }
+        state: { type: string }
+        hasConflicts: { type: boolean }
+    DeploymentDashboard:
+      type: object
+      properties:
+        channels:
+          type: array
+          items:
+            type: object
+            properties:
+              channel: { type: string }
+              currentVersion: { type: string }
+              previousVersion: { type: string }
+              rollbackTarget: { type: string }
+              status: { type: string }
+    ApprovalPolicy:
+      type: object
+      required: [name, applies_to]
+      properties:
+        name: { type: string }
+        applies_to: { type: string }
+        min_approvals: { type: integer }
+        required_roles: { type: array, items: { type: string } }
+        allow_self_approval: { type: boolean }
+        required_checks: { type: array, items: { type: string } }
+    AuditLog:
+      type: object
+      properties:
+        id: { type: integer }
+        actorEmail: { type: string }
+        action: { type: string }
+        entityType: { type: string }
+        entityId: { type: string, format: uuid }
+        oldValue: {}
+        newValue: {}
+        ipAddress: { type: string }
+        createdAt: { type: string, format: date-time }

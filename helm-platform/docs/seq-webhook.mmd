@@ -1,0 +1,29 @@
+%% Sequence — Provider webhook ingest + normalization, blueprint C.1 / I.3
+sequenceDiagram
+  autonumber
+  participant GH as GitHub
+  participant WH as helm-webhooks (WebhookController)
+  participant REG as ProviderRegistry
+  participant AD as GitHubAdapter
+  participant BUS as Event Bus
+  participant MC as MergeService (consumer)
+  participant WI as WorkItemService (consumer)
+  participant AUD as AuditConsumer
+
+  GH->>WH: POST /webhooks/github (pull_request.closed merged=true)
+  WH->>REG: for("github")
+  REG-->>WH: GitHubAdapter
+  WH->>AD: verifyWebhook(headers, rawBody)  %% HMAC-SHA256
+  alt invalid signature
+    AD-->>WH: false
+    WH-->>GH: 202 {accepted:false}
+  else valid
+    AD-->>WH: true
+    WH->>AD: normalizeWebhook(headers, body)
+    AD-->>WH: [pr.merged]
+    WH->>BUS: publish(pr.merged)
+    WH-->>GH: 202 {accepted:true}
+    BUS-->>MC: pr.merged → update merge_request.state=merged
+    BUS-->>WI: pr.merged → transition work_item → merged
+    BUS-->>AUD: pr.merged → append audit_log
+  end

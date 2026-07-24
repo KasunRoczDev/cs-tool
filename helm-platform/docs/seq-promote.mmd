@@ -1,0 +1,38 @@
+%% Sequence — Release promotion (the keystone), blueprint C.9.2 / J.1
+sequenceDiagram
+  autonumber
+  actor RM as Release Manager
+  participant API as helm-api (ReleaseController)
+  participant RS as ReleaseService
+  participant GOV as GovernanceService
+  participant CMP as CompatibilityService
+  participant DB as PostgreSQL (tx + outbox)
+  participant OBX as OutboxRelay (helm-worker)
+  participant BUS as Event Bus (Redis Streams)
+  participant NOTotif as NotificationConsumer
+  participant AUD as AuditConsumer
+
+  RM->>API: POST /releases/{id}/promote {to_channel: production}
+  API->>API: PermissionGuard: deploy.approve.production?
+  API->>RS: promote(ctx, id, "production", roles)
+  RS->>RS: runPreflight()
+  RS->>CMP: checkRelease() → compatibility ok?
+  RS->>GOV: isFrozen("production", roles)?
+  RS->>GOV: approvalsSatisfied(id, "promote:production")?
+  alt any gate fails
+    RS-->>API: 422 release_not_promotable / 409 freeze_active / 403 approval_required
+    API-->>RM: error envelope
+  else all gates pass
+    RS->>DB: BEGIN
+    RS->>DB: UPDATE release.status=production
+    RS->>DB: INSERT release_channel_history
+    RS->>DB: INSERT deployment(status=pending)
+    RS->>DB: INSERT outbox(release.promoted), outbox(deployment.started)
+    RS->>DB: COMMIT
+    RS-->>API: {release, deployment}
+    API-->>RM: 200 OK
+    OBX->>DB: poll unpublished outbox rows
+    OBX->>BUS: publish(release.promoted), publish(deployment.started)
+    BUS-->>NOTotif: release.promoted → route to Slack/Teams/Discord/Email
+    BUS-->>AUD: release.promoted → append audit_log
+  end

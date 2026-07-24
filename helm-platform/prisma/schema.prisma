@@ -1,0 +1,439 @@
+// Helm Platform — Prisma schema (MVP). Mirrors the DDL in the blueprint (Parts C & G).
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------- Identity & Access ----------------
+model User {
+  id          String   @id @default(uuid()) @db.Uuid
+  email       String   @unique
+  displayName String   @map("display_name")
+  avatarUrl   String?  @map("avatar_url")
+  ssoSubject  String?  @unique @map("sso_subject")
+  status      String   @default("active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  roles       UserRoleAssignment[]
+  tokens      ApiToken[]
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  key         String   @unique
+  name        String
+  isSystem    Boolean  @default(false) @map("is_system")
+  permissions RolePermission[]
+  assignments UserRoleAssignment[]
+  @@map("roles")
+}
+
+model Permission {
+  id    String @id @default(uuid()) @db.Uuid
+  key   String @unique
+  roles RolePermission[]
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String @map("role_id") @db.Uuid
+  permissionId String @map("permission_id") @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRoleAssignment {
+  id        String  @id @default(uuid()) @db.Uuid
+  userId    String  @map("user_id") @db.Uuid
+  roleId    String  @map("role_id") @db.Uuid
+  scopeType String  @default("global") @map("scope_type") // global|repository|channel
+  scopeId   String? @map("scope_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role @relation(fields: [roleId], references: [id])
+  @@unique([userId, roleId, scopeType, scopeId])
+  @@map("user_role_assignments")
+}
+
+model ApiToken {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  name       String
+  tokenHash  String   @map("token_hash")
+  scopes     String[] @default([])
+  lastUsedAt DateTime? @map("last_used_at")
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  user       User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@map("api_tokens")
+}
+
+// ---------------- Repository / Branch / Version ----------------
+model Repository {
+  id                String   @id @default(uuid()) @db.Uuid
+  name              String
+  slug              String   @unique
+  provider          String   @default("github")
+  providerFullName  String   @map("provider_full_name")
+  defaultBranch     String   @default("main") @map("default_branch")
+  techStack         String[] @default([]) @map("tech_stack")
+  dockerImageName   String?  @map("docker_image_name")
+  containerRegistry String?  @map("container_registry")
+  metadata          Json     @default("{}")
+  isActive          Boolean  @default(true) @map("is_active")
+  syncStatus        String   @default("healthy") @map("sync_status")
+  lastSyncedAt      DateTime? @map("last_synced_at")
+  deletedAt         DateTime? @map("deleted_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  branches          Branch[]
+  protectionRules   BranchProtectionRule[]
+  versions          ServiceVersion[]
+  @@map("repositories")
+}
+
+model BranchProtectionRule {
+  id                   String   @id @default(uuid()) @db.Uuid
+  repositoryId         String   @map("repository_id") @db.Uuid
+  pattern              String
+  requireReviews       Int      @default(1) @map("require_reviews")
+  requireStatusChecks  String[] @default([]) @map("require_status_checks")
+  enforceLinearHistory Boolean  @default(false) @map("enforce_linear_history")
+  restrictPushRoles    String[] @default([]) @map("restrict_push_roles")
+  createdAt            DateTime @default(now()) @map("created_at")
+  repository           Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  @@map("branch_protection_rules")
+}
+
+model Branch {
+  id           String   @id @default(uuid()) @db.Uuid
+  repositoryId String   @map("repository_id") @db.Uuid
+  name         String
+  type         String   // main|feature|bugfix|hotfix|release
+  headSha      String?  @map("head_sha")
+  aheadOfMain  Int?     @map("ahead_of_main")
+  behindMain   Int?     @map("behind_main")
+  lastCommitAt DateTime? @map("last_commit_at")
+  isProtected  Boolean  @default(false) @map("is_protected")
+  syncedAt     DateTime? @map("synced_at")
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  @@unique([repositoryId, name])
+  @@index([repositoryId, type])
+  @@map("branches")
+}
+
+model ServiceVersion {
+  id           String   @id @default(uuid()) @db.Uuid
+  repositoryId String   @map("repository_id") @db.Uuid
+  version      String
+  channel      String?
+  gitTag       String?  @map("git_tag")
+  commitSha    String?  @map("commit_sha")
+  releasedAt   DateTime? @map("released_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  repository   Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  @@unique([repositoryId, version])
+  @@map("service_versions")
+}
+
+model VersionCompatibility {
+  id              String @id @default(uuid()) @db.Uuid
+  repositoryId    String @map("repository_id") @db.Uuid
+  version         String
+  dependsRepoId   String @map("depends_repo_id") @db.Uuid
+  compatibleRange String @map("compatible_range")
+  @@unique([repositoryId, version, dependsRepoId])
+  @@map("version_compatibility")
+}
+
+// ---------------- Work items ----------------
+model WorkItem {
+  id               String   @id @default(uuid()) @db.Uuid
+  type             String   // feature|bug|hotfix
+  refCode          String?  @unique @map("ref_code")
+  title            String
+  description      String?
+  priority         String?
+  developerId      String?  @map("developer_id") @db.Uuid
+  repositoryId     String?  @map("repository_id") @db.Uuid
+  branchName       String?  @map("branch_name")
+  prNumber         Int?     @map("pr_number")
+  status           String   @default("open")
+  deploymentStatus String?  @map("deployment_status")
+  releaseId        String?  @map("release_id") @db.Uuid
+  metadata         Json     @default("{}")
+  deletedAt        DateTime? @map("deleted_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  release          Release? @relation(fields: [releaseId], references: [id], onDelete: SetNull)
+  @@index([releaseId])
+  @@index([repositoryId, status])
+  @@map("work_items")
+}
+
+// ---------------- Release (aggregate) ----------------
+model Release {
+  id               String   @id @default(uuid()) @db.Uuid
+  version          String   @unique
+  name             String?
+  status           String   @default("draft") // draft|canary|beta|production|enterprise|archived
+  channel          String?
+  releaseNotesMd   String?  @map("release_notes_md")
+  notesGeneratedAt DateTime? @map("notes_generated_at")
+  createdBy        String?  @map("created_by") @db.Uuid
+  deletedAt        DateTime? @map("deleted_at")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+  repositories     ReleaseRepository[]
+  channelHistory   ReleaseChannelHistory[]
+  workItems        WorkItem[]
+  deployments      Deployment[]
+  @@map("releases")
+}
+
+model ReleaseRepository {
+  id           String  @id @default(uuid()) @db.Uuid
+  releaseId    String  @map("release_id") @db.Uuid
+  repositoryId String  @map("repository_id") @db.Uuid
+  version      String
+  commitSha    String  @map("commit_sha")
+  branchName   String? @map("branch_name")
+  gitTag       String? @map("git_tag")
+  release      Release @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  @@unique([releaseId, repositoryId])
+  @@map("release_repositories")
+}
+
+model ReleaseChannelHistory {
+  id         String   @id @default(uuid()) @db.Uuid
+  releaseId  String   @map("release_id") @db.Uuid
+  channel    String
+  action     String   // promoted|rolled_back
+  fromStatus String?  @map("from_status")
+  approvedBy String?  @map("approved_by") @db.Uuid
+  createdAt  DateTime @default(now()) @map("created_at")
+  release    Release  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  @@map("release_channel_history")
+}
+
+// ---------------- Merge center ----------------
+model MergeRequest {
+  id              String   @id @default(uuid()) @db.Uuid
+  repositoryId    String   @map("repository_id") @db.Uuid
+  providerPrNumber Int?    @map("provider_pr_number")
+  sourceBranch    String   @map("source_branch")
+  targetBranch    String   @map("target_branch")
+  workItemId      String?  @map("work_item_id") @db.Uuid
+  releaseId       String?  @map("release_id") @db.Uuid
+  title           String?
+  authorId        String?  @map("author_id") @db.Uuid
+  state           String   @default("pending") // pending|conflict|approved|merged|closed
+  hasConflicts    Boolean  @default(false) @map("has_conflicts")
+  conflictFiles   String[] @default([]) @map("conflict_files")
+  reviewState     String?  @map("review_state")
+  mergeable       Boolean? 
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  approvals       MergeApproval[]
+  @@index([state])
+  @@map("merge_requests")
+}
+
+model MergeApproval {
+  id             String   @id @default(uuid()) @db.Uuid
+  mergeRequestId String   @map("merge_request_id") @db.Uuid
+  approverId     String   @map("approver_id") @db.Uuid
+  decision       String   // approved|rejected
+  comment        String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  mergeRequest   MergeRequest @relation(fields: [mergeRequestId], references: [id], onDelete: Cascade)
+  @@map("merge_approvals")
+}
+
+// ---------------- Deployment ----------------
+model Deployment {
+  id              String   @id @default(uuid()) @db.Uuid
+  releaseId       String   @map("release_id") @db.Uuid
+  channel         String
+  status          String   // pending|in_progress|success|failed|rolled_back
+  currentVersion  String?  @map("current_version")
+  previousVersion String?  @map("previous_version")
+  rollbackTarget  String?  @map("rollback_target")
+  triggeredBy     String?  @map("triggered_by") @db.Uuid
+  approvedBy      String?  @map("approved_by") @db.Uuid
+  startedAt       DateTime? @map("started_at")
+  finishedAt      DateTime? @map("finished_at")
+  logUrl          String?  @map("log_url")
+  createdAt       DateTime @default(now()) @map("created_at")
+  release         Release  @relation(fields: [releaseId], references: [id])
+  @@index([channel, createdAt])
+  @@map("deployments")
+}
+
+// ---------------- Governance: approvals, freezes ----------------
+model ApprovalPolicy {
+  id                String   @id @default(uuid()) @db.Uuid
+  name              String
+  appliesTo         String   @map("applies_to")
+  scopeId           String?  @map("scope_id") @db.Uuid
+  minApprovals      Int      @default(1) @map("min_approvals")
+  requiredRoles     String[] @default([]) @map("required_roles")
+  allowSelfApproval Boolean  @default(false) @map("allow_self_approval")
+  requiredChecks    String[] @default([]) @map("required_checks")
+  isActive          Boolean  @default(true) @map("is_active")
+  @@map("approval_policies")
+}
+
+model ApprovalRequest {
+  id                String   @id @default(uuid()) @db.Uuid
+  policyId          String?  @map("policy_id") @db.Uuid
+  subjectType       String   @map("subject_type")
+  subjectId         String   @map("subject_id") @db.Uuid
+  gate              String?
+  state             String   @default("pending")
+  requiredApprovals Int      @map("required_approvals")
+  expiresAt         DateTime? @map("expires_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  decisions         ApprovalDecision[]
+  @@map("approval_requests")
+}
+
+model ApprovalDecision {
+  id                String   @id @default(uuid()) @db.Uuid
+  approvalRequestId String   @map("approval_request_id") @db.Uuid
+  approverId        String   @map("approver_id") @db.Uuid
+  decision          String
+  comment           String?
+  createdAt         DateTime @default(now()) @map("created_at")
+  request           ApprovalRequest @relation(fields: [approvalRequestId], references: [id], onDelete: Cascade)
+  @@unique([approvalRequestId, approverId])
+  @@map("approval_decisions")
+}
+
+model FreezeWindow {
+  id            String   @id @default(uuid()) @db.Uuid
+  name          String
+  channels      String[]
+  startsAt      DateTime @map("starts_at")
+  endsAt        DateTime @map("ends_at")
+  reason        String?
+  overrideRoles String[] @default(["admin"]) @map("override_roles")
+  @@map("freeze_windows")
+}
+
+model ScheduledPromotion {
+  id        String   @id @default(uuid()) @db.Uuid
+  releaseId String   @map("release_id") @db.Uuid
+  toChannel String   @map("to_channel")
+  runAt     DateTime @map("run_at")
+  state     String   @default("scheduled")
+  createdBy String?  @map("created_by") @db.Uuid
+  @@map("scheduled_promotions")
+}
+
+model HealthGate {
+  id           String  @id @default(uuid()) @db.Uuid
+  channel      String
+  checkType    String  @map("check_type")
+  config       Json
+  soakSeconds  Int     @default(300) @map("soak_seconds")
+  autoRollback Boolean @default(true) @map("auto_rollback")
+  @@map("health_gates")
+}
+
+// ---------------- Notifications / webhooks / audit ----------------
+model NotificationChannel {
+  id       String   @id @default(uuid()) @db.Uuid
+  type     String   // email|slack|teams|discord
+  config   Json
+  events   String[]
+  isActive Boolean  @default(true) @map("is_active")
+  @@map("notification_channels")
+}
+
+model OutboundWebhook {
+  id         String   @id @default(uuid()) @db.Uuid
+  url        String
+  secretRef  String   @map("secret_ref")
+  events     String[]
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now()) @map("created_at")
+  @@map("outbound_webhooks")
+}
+
+model AuditLog {
+  id           BigInt   @id @default(autoincrement())
+  actorId      String?  @map("actor_id") @db.Uuid
+  actorEmail   String?  @map("actor_email")
+  action       String
+  entityType   String   @map("entity_type")
+  entityId     String?  @map("entity_id") @db.Uuid
+  repositoryId String?  @map("repository_id") @db.Uuid
+  oldValue     Json?    @map("old_value")
+  newValue     Json?    @map("new_value")
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  requestId    String?  @map("request_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  @@index([entityType, entityId])
+  @@index([actorId, createdAt])
+  @@map("audit_logs")
+}
+
+model EventOutbox {
+  id            BigInt   @id @default(autoincrement())
+  aggregateType String   @map("aggregate_type")
+  aggregateId   String   @map("aggregate_id")
+  type          String
+  payload       Json
+  published     Boolean  @default(false)
+  createdAt     DateTime @default(now()) @map("created_at")
+  @@index([published])
+  @@map("event_outbox")
+}
+
+model IdempotencyKey {
+  key         String   @id
+  userId      String?  @map("user_id") @db.Uuid
+  requestHash String   @map("request_hash")
+  response    Json?
+  statusCode  Int?     @map("status_code")
+  createdAt   DateTime @default(now()) @map("created_at")
+  @@map("idempotency_keys")
+}
+
+model Comment {
+  id         String   @id @default(uuid()) @db.Uuid
+  entityType String   @map("entity_type")
+  entityId   String   @map("entity_id") @db.Uuid
+  authorId   String?  @map("author_id") @db.Uuid
+  body       String
+  createdAt  DateTime @default(now()) @map("created_at")
+  @@map("comments")
+}
+
+model SavedFilter {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  module String
+  name   String
+  query  Json
+  @@map("saved_filters")
+}
+
+model Dependency {
+  id         String @id @default(uuid()) @db.Uuid
+  sourceType String @map("source_type")
+  sourceId   String @map("source_id") @db.Uuid
+  blocksType String @map("blocks_type")
+  blocksId   String @map("blocks_id") @db.Uuid
+  kind       String @default("blocks")
+  @@unique([sourceType, sourceId, blocksType, blocksId])
+  @@map("dependencies")
+}

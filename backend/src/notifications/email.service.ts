@@ -108,6 +108,55 @@ export class EmailService {
     this.log.log(`Email sent to ${to} — ${subject}`);
   }
 
+  /** Send a platform event (PR/release/deployment/hotfix) as a simple HTML email. */
+  async sendEvent(
+    to: string,
+    cc: string | undefined,
+    subjectPrefix: string,
+    msg: { title: string; lines: string[]; severity?: string },
+  ): Promise<void> {
+    const conn = await this.makeTransporter();
+    if (!conn) throw new Error('SMTP not configured');
+    const color =
+      { critical: '#e53e3e', warning: '#dd6b20', success: '#38a169', info: '#2f81f7' }[
+        msg.severity ?? 'info'
+      ] ?? '#2f81f7';
+    const body = msg.lines.map((l) => `<p style="margin:6px 0">${l}</p>`).join('');
+    const html = `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;background:#f7f7f7;padding:20px">
+  <div style="background:#fff;border:1px solid #e2e8f0;border-radius:8px;max-width:560px;margin:0 auto;overflow:hidden">
+    <div style="background:${color};color:#fff;padding:16px 22px"><h2 style="margin:0;font-size:17px">${msg.title}</h2></div>
+    <div style="padding:20px 22px;font-size:14px;color:#222">${body}</div>
+    <div style="padding:12px 22px;background:#f7f7f7;font-size:11px;color:#999;border-top:1px solid #e2e8f0">Sent by the Release &amp; DevOps platform</div>
+  </div></body></html>`;
+    await conn.transporter.sendMail({
+      from: conn.from,
+      to,
+      cc,
+      subject: `${subjectPrefix} ${msg.title}`,
+      html,
+    });
+    this.log.log(`Email event sent to ${to} — ${msg.title}`);
+  }
+
+  /**
+   * Send an email that threads with previous messages sharing the same
+   * `threadId` (via References/In-Reply-To headers) — used for the per-release
+   * approval thread so each sign-off lands in the same email conversation.
+   */
+  async sendThreaded(to: string[] | string, subject: string, html: string, threadId: string): Promise<void> {
+    const conn = await this.makeTransporter();
+    if (!conn) throw new Error('SMTP not configured');
+    await conn.transporter.sendMail({
+      from: conn.from,
+      to,
+      subject,
+      html,
+      references: threadId,
+      inReplyTo: threadId,
+    });
+    this.log.log(`Threaded email sent (${threadId}) — ${subject}`);
+  }
+
   async sendTest(to: string): Promise<void> {
     const conn = await this.makeTransporter();
     if (!conn) throw new Error('SMTP not configured — set SMTP settings in Settings page first');
