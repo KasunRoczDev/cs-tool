@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { startAuthentication } from '@simplewebauthn/browser';
 import { api, setToken, setRole } from '@/lib/api';
 
 export default function LoginPage() {
@@ -13,8 +14,10 @@ export default function LoginPage() {
   const [mfaToken, setMfaToken] = useState('');
   const [qr, setQr] = useState('');
   const [secret, setSecret] = useState('');
+  const [trustDevice, setTrustDevice] = useState(false);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const [passkeyBusy, setPasskeyBusy] = useState(false);
 
   const finish = ({ access_token, user }) => {
     setToken(access_token);
@@ -36,13 +39,32 @@ export default function LoginPage() {
       } else if (res.mfa_required) {
         setStep('verify');
       } else {
-        // Shouldn't happen (MFA required for all), but handle gracefully.
+        // Either MFA isn't enabled yet, or this browser is a trusted device.
         finish(res);
       }
     } catch {
       setErr('Invalid credentials');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const signInWithPasskey = async () => {
+    if (!email.trim()) {
+      setErr('Enter your email first, then choose a passkey');
+      return;
+    }
+    setErr('');
+    setPasskeyBusy(true);
+    try {
+      const { options, auth_token } = await api.passkeyLoginOptions(email);
+      const credential = await startAuthentication({ optionsJSON: options });
+      const res = await api.passkeyLoginVerify(auth_token, credential);
+      finish(res);
+    } catch (ex) {
+      setErr(ex?.message || 'Passkey sign-in failed or was cancelled');
+    } finally {
+      setPasskeyBusy(false);
     }
   };
 
@@ -53,8 +75,8 @@ export default function LoginPage() {
     try {
       const res =
         step === 'setup'
-          ? await api.mfaEnroll(mfaToken, code)
-          : await api.mfaVerify(mfaToken, code);
+          ? await api.mfaEnroll(mfaToken, code, trustDevice)
+          : await api.mfaVerify(mfaToken, code, trustDevice);
       finish(res);
     } catch (ex) {
       setErr(ex?.message || 'Invalid authentication code');
@@ -89,6 +111,14 @@ export default function LoginPage() {
           </label>
           {err && <div className="error">{err}</div>}
           <button type="submit" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+          <button
+            type="button"
+            onClick={signInWithPasskey}
+            disabled={passkeyBusy}
+            style={{ marginTop: 8, background: 'transparent', border: '1px solid var(--border)' }}
+          >
+            {passkeyBusy ? 'Waiting for passkey…' : 'Sign in with a passkey'}
+          </button>
         </form>
       )}
 
@@ -99,7 +129,7 @@ export default function LoginPage() {
           {qr && <img src={qr} alt="TOTP QR code" style={{ width: 180, height: 180, alignSelf: 'center' }} />}
           {secret && (
             <p style={{ fontSize: 12, wordBreak: 'break-all' }}>
-              Can’t scan? Enter this key manually: <code>{secret}</code>
+              Can&apos;t scan? Enter this key manually: <code>{secret}</code>
             </p>
           )}
           <label>Authentication code
@@ -112,6 +142,10 @@ export default function LoginPage() {
               autoFocus
               required
             />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+            <input type="checkbox" checked={trustDevice} onChange={(e) => setTrustDevice(e.target.checked)} />
+            Trust this device for 7 days — don&apos;t ask for a code again here
           </label>
           {err && <div className="error">{err}</div>}
           <button type="submit" disabled={busy}>{busy ? 'Verifying…' : 'Verify & continue'}</button>
@@ -132,6 +166,10 @@ export default function LoginPage() {
               autoFocus
               required
             />
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+            <input type="checkbox" checked={trustDevice} onChange={(e) => setTrustDevice(e.target.checked)} />
+            Trust this device for 7 days — don&apos;t ask for a code again here
           </label>
           {err && <div className="error">{err}</div>}
           <button type="submit" disabled={busy}>{busy ? 'Verifying…' : 'Verify'}</button>
