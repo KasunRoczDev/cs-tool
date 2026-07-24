@@ -132,6 +132,24 @@ const bcrypt = require('bcryptjs');
     await client.query(fs.readFileSync(rbacPath, 'utf8'));
   }
 
+  // Apply trusted-devices migration (idempotent — IF NOT EXISTS).
+  const trustedDevicesPath =
+    process.env.TRUSTED_DEVICES_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/trusted_devices_migration.sql');
+  if (fs.existsSync(trustedDevicesPath)) {
+    console.log('Applying trusted-devices migration...');
+    await client.query(fs.readFileSync(trustedDevicesPath, 'utf8'));
+  }
+
+  // Apply WebAuthn (passkeys) migration (idempotent — IF NOT EXISTS).
+  const webauthnPath =
+    process.env.WEBAUTHN_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/webauthn_migration.sql');
+  if (fs.existsSync(webauthnPath)) {
+    console.log('Applying webauthn migration...');
+    await client.query(fs.readFileSync(webauthnPath, 'utf8'));
+  }
+
   const email = process.env.ADMIN_EMAIL || 'admin@example.com';
   const password = process.env.ADMIN_PASSWORD || 'admin123';
   const hash = await bcrypt.hash(password, 10);

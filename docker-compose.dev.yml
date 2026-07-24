@@ -25,6 +25,8 @@ services:
       DEPLOY_JOBS_MIGRATION_PATH: /database/deploy_jobs_migration.sql
       APPROVALS_MIGRATION_PATH: /database/release_approvals_migration.sql
       RBAC_MIGRATION_PATH: /database/rbac_migration.sql
+      TRUSTED_DEVICES_MIGRATION_PATH: /database/trusted_devices_migration.sql
+      WEBAUTHN_MIGRATION_PATH: /database/webauthn_migration.sql
     volumes:
       - ./backend:/app
       - /app/node_modules
