@@ -1,7 +1,9 @@
 jest.mock('@simplewebauthn/server', () => ({
   generateRegistrationOptions: jest.fn().mockResolvedValue({ challenge: 'reg-challenge' }),
   verifyRegistrationResponse: jest.fn(),
-  generateAuthenticationOptions: jest.fn().mockResolvedValue({ challenge: 'auth-challenge' }),
+  generateAuthenticationOptions: jest.fn().mockImplementation((opts: any) =>
+    Promise.resolve({ challenge: 'auth-challenge', allowCredentials: opts.allowCredentials }),
+  ),
   verifyAuthenticationResponse: jest.fn(),
 }));
 
@@ -76,5 +78,28 @@ describe('PasskeyService', () => {
     expect(user).toEqual({ id: 'user-1', email: 'a@b.com', role: 'admin' });
     const updateCall = query.mock.calls[1];
     expect(updateCall[1]).toEqual([4, 'cred-1']);
+  });
+
+  it('returns a non-empty decoy allowCredentials for an email with no real passkeys', async () => {
+    const query = jest.fn().mockResolvedValue({ rows: [] }); // no user found
+    const svc = new PasskeyService(makePool(query));
+    const { options } = await svc.authenticationOptions('nobody@example.com');
+    expect(options.allowCredentials.length).toBeGreaterThan(0);
+  });
+
+  it('returns the SAME decoy id for the same email across repeated calls', async () => {
+    const query = jest.fn().mockResolvedValue({ rows: [] });
+    const svc = new PasskeyService(makePool(query));
+    const first = await svc.authenticationOptions('same@example.com');
+    const second = await svc.authenticationOptions('same@example.com');
+    expect(first.options.allowCredentials[0].id).toBe(second.options.allowCredentials[0].id);
+  });
+
+  it('returns different decoy ids for different emails', async () => {
+    const query = jest.fn().mockResolvedValue({ rows: [] });
+    const svc = new PasskeyService(makePool(query));
+    const a = await svc.authenticationOptions('a@example.com');
+    const b = await svc.authenticationOptions('b@example.com');
+    expect(a.options.allowCredentials[0].id).not.toBe(b.options.allowCredentials[0].id);
   });
 });
