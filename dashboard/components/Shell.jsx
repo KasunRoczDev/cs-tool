@@ -68,6 +68,8 @@ export default function Shell({ children }) {
         { href: '/setup', label: '📋 Setup Guide' },
         ...(role === 'admin' ? [{ href: '/users', label: '👥 Users' }] : []),
         ...(role === 'admin' ? [{ href: '/access', label: '🔐 Access Control' }] : []),
+        // Personal account security (passkeys, trusted devices) — per-user, not shared app config.
+        { href: '/profile', label: '👤 My Profile' },
         // Settings available to all roles (theme); SMTP read-only for non-admin
         { href: '/settings', label: '⚙️ Settings' },
       ],
