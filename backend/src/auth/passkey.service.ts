@@ -19,7 +19,10 @@ const ORIGIN = process.env.WEBAUTHN_ORIGIN || `http://${RP_ID}:5173`;
 // (a randomly-regenerated decoy would itself leak "this account has no real
 // credential" by changing every call, unlike a real stored credential ID).
 function decoyCredentialId(email: string): string {
-  const secret = process.env.JWT_SECRET ?? 'dev-secret';
+  // A dedicated secret for this protection, decoupled from JWT_SECRET so it
+  // can be hardened independently (mirrors TOKEN_ENC_KEY in crypto.util.ts
+  // being its own purpose-specific env var rather than a reused one).
+  const secret = process.env.WEBAUTHN_DECOY_SECRET ?? process.env.JWT_SECRET ?? 'dev-secret';
   return createHmac('sha256', secret).update(email.trim().toLowerCase()).digest('base64url').slice(0, 32);
 }
 
@@ -96,7 +99,10 @@ export class PasskeyService {
       // a deterministic decoy credential so the response is indistinguishable
       // (same shape, same size) from an account that does have passkeys,
       // preventing enumeration of which emails have passkeys registered.
-      allowCredentials = [{ id: decoyCredentialId(email) }];
+      // Include a plausible transports value too — generateAuthenticationOptions
+      // echoes transports into its output, so omitting it would let an attacker
+      // tell decoy from real by the mere presence/absence of that field alone.
+      allowCredentials = [{ id: decoyCredentialId(email), transports: ['internal'] }];
     }
     const options = await generateAuthenticationOptions({
       rpID: RP_ID,

@@ -87,6 +87,26 @@ describe('PasskeyService', () => {
     expect(options.allowCredentials.length).toBeGreaterThan(0);
   });
 
+  it('gives the decoy credential a non-empty transports array, matching the shape of a real entry', async () => {
+    const query = jest.fn().mockResolvedValue({ rows: [] }); // no user found
+    const svc = new PasskeyService(makePool(query));
+    const { options } = await svc.authenticationOptions('nobody@example.com');
+    expect(Array.isArray(options.allowCredentials[0].transports)).toBe(true);
+    expect(options.allowCredentials[0].transports.length).toBeGreaterThan(0);
+  });
+
+  it('returns a decoy allowCredentials entry for a known email with zero registered passkeys', async () => {
+    const query = jest.fn()
+      .mockResolvedValueOnce({ rows: [{ id: 'user-1' }] }) // user exists
+      .mockResolvedValueOnce({ rows: [] }); // but has no webauthn_credentials rows
+    const svc = new PasskeyService(makePool(query));
+    const { options, userId } = await svc.authenticationOptions('has-account@example.com');
+    expect(userId).toBe('user-1');
+    expect(options.allowCredentials.length).toBeGreaterThan(0);
+    expect(Array.isArray(options.allowCredentials[0].transports)).toBe(true);
+    expect(options.allowCredentials[0].transports.length).toBeGreaterThan(0);
+  });
+
   it('returns the SAME decoy id for the same email across repeated calls', async () => {
     const query = jest.fn().mockResolvedValue({ rows: [] });
     const svc = new PasskeyService(makePool(query));
