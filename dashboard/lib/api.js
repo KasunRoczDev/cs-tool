@@ -34,6 +34,7 @@ async function req(path, opts = {}) {
   const token = getToken();
   const res = await fetch(`${BASE}/api/v1${path}`, {
     ...opts,
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -56,10 +57,24 @@ async function req(path, opts = {}) {
 export const api = {
   login: (email, password) =>
     req('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
-  mfaVerify: (mfa_token, code) =>
-    req('/auth/mfa/verify', { method: 'POST', body: JSON.stringify({ mfa_token, code }) }),
-  mfaEnroll: (mfa_token, code) =>
-    req('/auth/mfa/enroll', { method: 'POST', body: JSON.stringify({ mfa_token, code }) }),
+  mfaVerify: (mfa_token, code, trust_device = false) =>
+    req('/auth/mfa/verify', { method: 'POST', body: JSON.stringify({ mfa_token, code, trust_device }) }),
+  mfaEnroll: (mfa_token, code, trust_device = false) =>
+    req('/auth/mfa/enroll', { method: 'POST', body: JSON.stringify({ mfa_token, code, trust_device }) }),
+  // passkeys (passwordless login + management)
+  passkeyLoginOptions: (email) =>
+    req('/auth/passkeys/login/options', { method: 'POST', body: JSON.stringify({ email }) }),
+  passkeyLoginVerify: (auth_token, credential) =>
+    req('/auth/passkeys/login/verify', { method: 'POST', body: JSON.stringify({ auth_token, credential }) }),
+  passkeyRegisterOptions: () => req('/auth/passkeys/register/options', { method: 'POST' }),
+  passkeyRegisterVerify: (reg_token, credential) =>
+    req('/auth/passkeys/register/verify', { method: 'POST', body: JSON.stringify({ reg_token, credential }) }),
+  myPasskeys: () => req('/auth/passkeys'),
+  deletePasskey: (id) => req(`/auth/passkeys/${id}`, { method: 'DELETE' }),
+  // trusted devices
+  myTrustedDevices: () => req('/auth/devices'),
+  revokeTrustedDevice: (id) => req(`/auth/devices/${id}`, { method: 'DELETE' }),
+  revokeAllTrustedDevices: () => req('/auth/devices', { method: 'DELETE' }),
   me: () => req('/auth/me'),
   overview: () => req('/servers/overview'),
   servers: () => req('/servers'),

@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import express from 'express';
 
@@ -16,6 +17,7 @@ async function bootstrap() {
   }
 
   app.use(helmet());
+  app.use(cookieParser());
   app.use(express.json({ limit: '100mb' }));
   app.use(express.urlencoded({ 
     limit: '100mb',

@@ -33,6 +33,11 @@ services:
       DEPLOY_JOBS_MIGRATION_PATH: /app/database/deploy_jobs_migration.sql
       APPROVALS_MIGRATION_PATH: /app/database/release_approvals_migration.sql
       RBAC_MIGRATION_PATH: /app/database/rbac_migration.sql
+      TRUSTED_DEVICES_MIGRATION_PATH: /app/database/trusted_devices_migration.sql
+      WEBAUTHN_MIGRATION_PATH: /app/database/webauthn_migration.sql
+      WEBAUTHN_RP_ID: localhost
+      WEBAUTHN_RP_NAME: Monitoring Platform
+      WEBAUTHN_ORIGIN: http://localhost:5173
       # Key used to encrypt per-repo GitHub tokens at rest (AES-256-GCM).
       # Change this to a long random string; rotating it invalidates stored tokens.
       TOKEN_ENC_KEY: change-me-to-a-long-random-token-encryption-key
@@ -62,6 +67,8 @@ services:
       - ./database/deploy_jobs_migration.sql:/app/database/deploy_jobs_migration.sql:ro
       - ./database/release_approvals_migration.sql:/app/database/release_approvals_migration.sql:ro
       - ./database/rbac_migration.sql:/app/database/rbac_migration.sql:ro
+      - ./database/trusted_devices_migration.sql:/app/database/trusted_devices_migration.sql:ro
+      - ./database/webauthn_migration.sql:/app/database/webauthn_migration.sql:ro
     depends_on:
       db:
         condition: service_healthy
