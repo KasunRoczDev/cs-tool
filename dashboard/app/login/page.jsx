@@ -62,7 +62,15 @@ export default function LoginPage() {
       const res = await api.passkeyLoginVerify(auth_token, credential);
       finish(res);
     } catch (ex) {
-      setErr(ex?.message || 'Passkey sign-in failed or was cancelled');
+      // NotAllowedError covers both "user cancelled" and "no matching passkey on
+      // this device" — browsers deliberately don't distinguish the two (so a
+      // failed attempt can't be used to probe whether an account has passkeys).
+      // Guide toward the fallback + setup instead of a raw browser error string.
+      setErr(
+        ex?.name === 'NotAllowedError'
+          ? "No passkey found for this account on this device. Sign in with your password below, then add a passkey from your Profile for faster sign-in next time."
+          : ex?.message || 'Passkey sign-in failed. Try your password instead.',
+      );
     } finally {
       setPasskeyBusy(false);
     }
@@ -115,7 +123,7 @@ export default function LoginPage() {
             type="button"
             onClick={signInWithPasskey}
             disabled={passkeyBusy}
-            style={{ marginTop: 8, background: 'transparent', border: '1px solid var(--border)' }}
+            style={{ marginTop: 8, background: 'transparent', border: '1px solid var(--border)', color: 'var(--text)' }}
           >
             {passkeyBusy ? 'Waiting for passkey…' : 'Sign in with a passkey'}
           </button>

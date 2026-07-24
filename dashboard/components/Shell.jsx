@@ -2,8 +2,10 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { getToken, setToken, setRole, getRole } from '@/lib/api';
+import { api, getToken, setToken, setRole, getRole } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
+
+const PASSKEY_NUDGE_DISMISSED_KEY = 'passkeyNudgeDismissed';
 
 export default function Shell({ children }) {
   const router = useRouter();
@@ -11,11 +13,25 @@ export default function Shell({ children }) {
   const [ready, setReady] = useState(false);
   const [role, setRoleState] = useState(null);
   const [alertCount, setAlertCount] = useState(0);
+  const [showPasskeyNudge, setShowPasskeyNudge] = useState(false);
 
   useEffect(() => {
     if (!getToken()) router.replace('/login');
     else { setRoleState(getRole()); setReady(true); }
   }, [router]);
+
+  useEffect(() => {
+    if (!ready) return;
+    if (localStorage.getItem(PASSKEY_NUDGE_DISMISSED_KEY)) return;
+    api.myPasskeys()
+      .then((passkeys) => setShowPasskeyNudge(passkeys.length === 0))
+      .catch(() => {});
+  }, [ready]);
+
+  const dismissPasskeyNudge = () => {
+    localStorage.setItem(PASSKEY_NUDGE_DISMISSED_KEY, '1');
+    setShowPasskeyNudge(false);
+  };
 
   useEffect(() => {
     const s = getSocket();
@@ -98,7 +114,27 @@ export default function Shell({ children }) {
           Log out
         </button>
       </aside>
-      <main className="content">{children}</main>
+      <main className="content">
+        {showPasskeyNudge && pathname !== '/profile' && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+            background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: 8,
+            padding: '10px 16px', marginBottom: 16, fontSize: 13,
+          }}>
+            <span>🔑 Set up a passkey for faster, more secure sign-in.</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Link href="/profile" className="btn-primary" style={{
+                padding: '6px 12px', borderRadius: 6, fontWeight: 600, fontSize: 12,
+              }}>Set up</Link>
+              <button onClick={dismissPasskeyNudge} style={{
+                background: 'transparent', border: 'none', color: 'var(--muted)',
+                cursor: 'pointer', fontSize: 16, lineHeight: 1, padding: 0,
+              }} aria-label="Dismiss">✕</button>
+            </div>
+          </div>
+        )}
+        {children}
+      </main>
     </div>
   );
 }
