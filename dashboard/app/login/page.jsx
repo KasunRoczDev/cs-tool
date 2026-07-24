@@ -58,7 +58,7 @@ export default function LoginPage() {
     setPasskeyBusy(true);
     try {
       const { options, auth_token } = await api.passkeyLoginOptions(email);
-      const credential = await startAuthentication({ optionsJSON: options });
+      const credential = await startAuthentication(options);
       const res = await api.passkeyLoginVerify(auth_token, credential);
       finish(res);
     } catch (ex) {

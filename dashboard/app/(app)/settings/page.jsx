@@ -299,7 +299,7 @@ function SecuritySection() {
     setAddingPasskey(true);
     try {
       const { options, reg_token } = await api.passkeyRegisterOptions();
-      const credential = await startRegistration({ optionsJSON: options });
+      const credential = await startRegistration(options);
       await api.passkeyRegisterVerify(reg_token, credential);
       notify('Passkey added');
       load();
