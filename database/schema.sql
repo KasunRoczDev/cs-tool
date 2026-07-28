@@ -155,11 +155,55 @@ SELECT add_continuous_aggregate_policy('metrics_1m',
   schedule_interval => INTERVAL '1 minute',
   if_not_exists => TRUE);
 
+-- Hourly rollup (built from metrics_1m) for long-range dashboard trends.
+-- Survives raw `metrics` retention since it's materialized into its own
+-- hypertable, independent of the source chunks being dropped.
+CREATE MATERIALIZED VIEW IF NOT EXISTS metrics_1h
+WITH (timescaledb.continuous) AS
+SELECT
+  server_id,
+  time_bucket('1 hour', bucket) AS bucket,
+  avg(cpu_usage)    AS cpu_usage,
+  avg(memory_usage) AS memory_usage,
+  avg(disk_usage)   AS disk_usage,
+  avg(net_in)       AS net_in,
+  avg(net_out)      AS net_out
+FROM metrics_1m
+GROUP BY server_id, time_bucket('1 hour', bucket)
+WITH NO DATA;
+
+SELECT add_continuous_aggregate_policy('metrics_1h',
+  start_offset => INTERVAL '1 day',
+  end_offset   => INTERVAL '1 hour',
+  schedule_interval => INTERVAL '1 hour',
+  if_not_exists => TRUE);
+
+-- Daily rollup of security events (counts by server/type/severity) for
+-- long-range trend/reporting after raw security_events age out.
+CREATE MATERIALIZED VIEW IF NOT EXISTS security_events_daily
+WITH (timescaledb.continuous) AS
+SELECT
+  server_id,
+  event_type,
+  severity,
+  time_bucket('1 day', time) AS bucket,
+  count(*)                   AS event_count,
+  count(DISTINCT source_ip)  AS distinct_ips
+FROM security_events
+GROUP BY server_id, event_type, severity, bucket
+WITH NO DATA;
+
+SELECT add_continuous_aggregate_policy('security_events_daily',
+  start_offset => INTERVAL '3 days',
+  end_offset   => INTERVAL '1 hour',
+  schedule_interval => INTERVAL '1 hour',
+  if_not_exists => TRUE);
+
 -- ---------------------------------------------------------------------
 -- RETENTION POLICIES  (configurable; defaults below)
 -- ---------------------------------------------------------------------
-SELECT add_retention_policy('metrics',         INTERVAL '30 days',  if_not_exists => TRUE);
-SELECT add_retention_policy('security_events', INTERVAL '180 days', if_not_exists => TRUE);
+SELECT add_retention_policy('metrics',         INTERVAL '30 days', if_not_exists => TRUE);
+SELECT add_retention_policy('security_events', INTERVAL '90 days', if_not_exists => TRUE);
 
 -- ---------------------------------------------------------------------
 -- COMPRESSION  (saves space on older chunks)
@@ -169,6 +213,13 @@ ALTER TABLE metrics SET (
   timescaledb.compress_segmentby = 'server_id'
 );
 SELECT add_compression_policy('metrics', INTERVAL '7 days', if_not_exists => TRUE);
+
+ALTER TABLE security_events SET (
+  timescaledb.compress,
+  timescaledb.compress_segmentby = 'server_id',
+  timescaledb.compress_orderby = 'time DESC'
+);
+SELECT add_compression_policy('security_events', INTERVAL '7 days', if_not_exists => TRUE);
 
 -- ---------------------------------------------------------------------
 -- SEED  (default admin — CHANGE THE PASSWORD)
