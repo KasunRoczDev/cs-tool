@@ -49,6 +49,14 @@ export class ServersController {
     return this.servers.register(dto.name, dto.hostname, dto.ip_address, dto.os, dto.product_id);
   }
 
+  // Issues a new API key for an already-onboarded server (e.g. its agent.yaml was lost).
+  // Invalidates the old key immediately.
+  @Roles('admin', 'operator')
+  @Post(':id/regenerate-key')
+  regenerateKey(@Param('id') id: string) {
+    return this.servers.regenerateKey(id);
+  }
+
   @Get('vulnerability-report')
   vulnerabilityReport() {
     return this.servers.vulnerabilityReport();

@@ -18,6 +18,18 @@ export class ServersService {
     return { ...rows[0], api_key: apiKey };
   }
 
+  /** Issue a fresh API key for an already-onboarded server; the old key stops working immediately. Returns the plaintext key ONCE. */
+  async regenerateKey(id: string) {
+    const apiKey = generateApiKey();
+    const { rows } = await this.pool.query(
+      `UPDATE servers SET api_key_hash = $1 WHERE id = $2
+       RETURNING id, name, hostname, status, product_id, created_at`,
+      [hashApiKey(apiKey), id],
+    );
+    if (!rows[0]) throw new NotFoundException('Server not found');
+    return { ...rows[0], api_key: apiKey };
+  }
+
   list() {
     return this.pool
       .query(

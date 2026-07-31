@@ -85,6 +85,7 @@ export const api = {
     req(`/servers/${id}/security-events` + qs({ type })),
   registerServer: (body) =>
     req('/servers', { method: 'POST', body: JSON.stringify(body) }),
+  regenerateServerKey: (id) => req(`/servers/${id}/regenerate-key`, { method: 'POST' }),
   updateServer: (id, body) =>
     req(`/servers/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   vulnerabilityReport: () => req('/servers/vulnerability-report'),

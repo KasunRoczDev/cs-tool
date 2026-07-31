@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import MetricChart from '@/components/MetricChart';
 import PaginatedEventList from '@/components/PaginatedEventList';
+import RegenerateKey from '@/components/RegenerateKey';
 
 const MAX_POINTS = 120;
 const fmt = (iso) => new Date(iso).toLocaleTimeString();
@@ -56,7 +57,10 @@ export default function ServerDetailPage() {
     <div>
       <div className="page-head">
         <h2>{server.name} <span className={`dot ${server.status}`} /></h2>
-        <span className="muted">{server.hostname || server.ip_address || ''}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span className="muted">{server.hostname || server.ip_address || ''}</span>
+          <RegenerateKey serverId={id} />
+        </div>
       </div>
 
       <div className="chart-grid">

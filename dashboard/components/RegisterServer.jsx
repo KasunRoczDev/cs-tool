@@ -12,6 +12,7 @@ export default function RegisterServer({ onClose, defaultProductId = '' }) {
   const [products, setProducts] = useState([]);
   const [result, setResult] = useState(null);
   const [err, setErr] = useState('');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     api.products().then(setProducts).catch(() => {});
@@ -30,6 +31,14 @@ export default function RegisterServer({ onClose, defaultProductId = '' }) {
     } catch {
       setErr('Failed to register (need admin/operator role)');
     }
+  };
+
+  const copyKey = () => {
+    if (!result) return;
+    navigator.clipboard.writeText(result.api_key).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
   };
 
   return (
@@ -63,6 +72,9 @@ export default function RegisterServer({ onClose, defaultProductId = '' }) {
             <h3>Server created ✅</h3>
             <p>Copy this API key now — it is shown only once. Put it in the agent config.</p>
             <pre className="apikey">{result.api_key}</pre>
+            <button type="button" className="btn-secondary" onClick={copyKey}>
+              {copied ? 'Copied!' : 'Copy API key'}
+            </button>
             <p className="hint">Set <code>api_key</code> in <code>/etc/monitor-agent/agent.yaml</code></p>
             <div className="modal-actions">
               <button onClick={onClose}>Done</button>

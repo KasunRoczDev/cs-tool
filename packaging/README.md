@@ -22,6 +22,25 @@ sudo systemctl enable --now monitor-agent
 journalctl -u monitor-agent -f
 ```
 
+## Updating an already-installed agent
+
+`build-deb.sh` doesn't bump the package version between builds, so re-running
+it and `dpkg -i`-ing the result on a server that already has the agent
+installed is a same-version reinstall — `/etc/monitor-agent/agent.yaml` is a
+declared `conffile`, so dpkg preserves your edits automatically. This is the
+supported way to update.
+
+`dpkg -P monitor-agent` / `apt purge monitor-agent` is different: purge
+deliberately deletes conffiles, including your configured `server_url` and
+`api_key`. Avoid it for routine updates — use `dpkg -r` (remove, keeps
+conffiles) or just reinstall over the existing install. As a safety net,
+`prerm` backs up a configured `agent.yaml` to `agent.yaml.bak` before removal,
+and `postinst` restores it automatically if a later install lands back on the
+stock placeholder — but if that recovery path doesn't fire for some reason,
+the API key can't be recovered from the platform (it's stored hashed); use
+**Regenerate API key** on the server's detail page in the dashboard instead
+of re-registering the server from scratch.
+
 ## Package layout
 
 | Path | Purpose |
