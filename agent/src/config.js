@@ -7,6 +7,7 @@ const DEFAULTS = {
   api_key: '',
   metrics_interval: 15,
   send_interval: 30,
+  health_check_timeout: 5,
   metrics: true,
   security_logs: true,
   tls_verify: true,

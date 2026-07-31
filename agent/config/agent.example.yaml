@@ -13,6 +13,11 @@ metrics_interval: 15
 # How often to flush buffered data to the server (seconds)
 send_interval: 30
 
+# Before each flush, the agent probes the server with a cheap HEAD request.
+# If it doesn't respond within this many seconds, the flush is skipped (data
+# stays buffered) instead of sending the full metrics/events payload.
+health_check_timeout: 5
+
 # Feature toggles
 metrics: true
 security_logs: true

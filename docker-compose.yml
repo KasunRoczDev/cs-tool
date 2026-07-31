@@ -21,7 +21,7 @@ services:
       PORT: 4000
       DATABASE_URL: postgres://monitor:monitor@db:5432/monitoring
       JWT_SECRET: change-me-to-a-long-random-string
-      DASHBOARD_ORIGIN: http://localhost:5173
+      DASHBOARD_ORIGIN: ${DASHBOARD_ORIGIN:-https://cs.oms.parallaxtec.dev}
       SCHEMA_PATH: /app/database/schema.sql
       PRODUCTS_MIGRATION_PATH: /app/database/products_migration.sql
       SETTINGS_MIGRATION_PATH: /app/database/settings_migration.sql
@@ -35,9 +35,14 @@ services:
       RBAC_MIGRATION_PATH: /app/database/rbac_migration.sql
       TRUSTED_DEVICES_MIGRATION_PATH: /app/database/trusted_devices_migration.sql
       WEBAUTHN_MIGRATION_PATH: /app/database/webauthn_migration.sql
-      WEBAUTHN_RP_ID: localhost
+      # Must match the real domain the dashboard is served from in production
+      # (e.g. WEBAUTHN_RP_ID=cs.oms.parallaxtec.dev, WEBAUTHN_ORIGIN=https://cs.oms.parallaxtec.dev)
+      # or the browser rejects passkey requests with "'rp.id' cannot be used
+      # with the current origin". Set these in a .env file next to this compose
+      # file rather than editing the defaults below.
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:-cs.oms.parallaxtec.dev}
       WEBAUTHN_RP_NAME: Monitoring Platform
-      WEBAUTHN_ORIGIN: http://localhost:5173
+      WEBAUTHN_ORIGIN: ${WEBAUTHN_ORIGIN:-https://cs.oms.parallaxtec.dev}
       # Key used to encrypt per-repo GitHub tokens at rest (AES-256-GCM).
       # Change this to a long random string; rotating it invalidates stored tokens.
       TOKEN_ENC_KEY: change-me-to-a-long-random-token-encryption-key

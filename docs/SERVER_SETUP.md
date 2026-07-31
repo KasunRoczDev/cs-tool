@@ -258,6 +258,12 @@ systemd couldn't execute the command. Causes:
 - The script path is wrong: `ls -l /opt/monitor-agent/monitor-agent.js`.
 Test manually: `sudo -u monitor-agent /usr/bin/node /opt/monitor-agent/monitor-agent.js`.
 
+**Passkeys fail with `'rp.id' cannot be used with the current origin`**
+`WEBAUTHN_RP_ID`/`WEBAUTHN_ORIGIN` (and `DASHBOARD_ORIGIN` for CORS) default to
+`localhost` in `docker-compose.yml`. When deploying to a real domain, copy
+`.env.example` (repo root) to `.env` next to `docker-compose.yml` with your actual
+domain, then `docker compose up -d` to recreate the backend with the new values.
+
 **Agent connects but server stays offline / `buffering` warnings**
 - `MONITOR_SERVER_URL` must be reachable from the agent host (not `localhost` unless
   the backend is on the same box). Check firewall/port 4000.
