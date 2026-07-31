@@ -17,7 +17,9 @@ services:
 
   backend:
     build: ./backend
+    restart: unless-stopped
     environment:
+      NODE_OPTIONS: "--max-old-space-size=4096"
       PORT: 4000
       DATABASE_URL: postgres://monitor:monitor@db:5432/monitoring
       JWT_SECRET: change-me-to-a-long-random-string
