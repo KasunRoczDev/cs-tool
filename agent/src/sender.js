@@ -53,17 +53,29 @@ class Sender {
     }
     this._serverUp = true;
 
-    if (this.metricsQueue.length) {
-      const batch = this.metricsQueue.splice(0, this.metricsQueue.length);
-      const ok = await this._post('/api/v1/metrics', { metrics: batch });
-      if (!ok) this.metricsQueue.unshift(...batch); // requeue on failure
-    }
-    if (this.eventsQueue.length) {
-      const batch = this.eventsQueue.splice(0, this.eventsQueue.length);
-      const ok = await this._post('/api/v1/security-events', { events: batch });
-      if (!ok) this.eventsQueue.unshift(...batch);
-    }
+    await this._flushQueue('metricsQueue', '/api/v1/metrics', 'metrics');
+    await this._flushQueue('eventsQueue', '/api/v1/security-events', 'events');
     this._saveBuffer();
+  }
+
+  // Sends the queue in bounded chunks instead of one request for the whole
+  // backlog — after an outage the queue can hold tens of thousands of items,
+  // and a single giant batch is slow to process server-side and, if the
+  // batch fails or gets rejected, retries unchanged forever, wedging every
+  // item behind it. Stops at the first failing chunk and leaves it (and
+  // everything after it) queued for the next flush interval; a per-flush
+  // chunk cap keeps one flush() call from running unbounded against a huge
+  // backlog.
+  async _flushQueue(queueName, pathName, bodyKey) {
+    const chunkSize = this.cfg.send_batch_size || 1000;
+    const maxChunksPerFlush = 20;
+    const queue = this[queueName];
+    for (let sent = 0; queue.length && sent < maxChunksPerFlush; sent++) {
+      const batch = queue.slice(0, chunkSize);
+      const ok = await this._post(pathName, { [bodyKey]: batch });
+      if (!ok) break;
+      queue.splice(0, batch.length);
+    }
   }
 
   // Lightweight reachability probe (no body) so a dead server is detected

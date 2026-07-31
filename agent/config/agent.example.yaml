@@ -18,6 +18,12 @@ send_interval: 30
 # stays buffered) instead of sending the full metrics/events payload.
 health_check_timeout: 5
 
+# Max items per metrics/events POST. After a long outage the buffer can hold
+# tens of thousands of items; sending them as bounded chunks instead of one
+# giant request keeps any single request fast and means one bad item can only
+# ever block its own chunk, not the whole backlog.
+send_batch_size: 1000
+
 # Feature toggles
 metrics: true
 security_logs: true
