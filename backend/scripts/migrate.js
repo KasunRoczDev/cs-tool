@@ -150,6 +150,26 @@ const bcrypt = require('bcryptjs');
     await client.query(fs.readFileSync(webauthnPath, 'utf8'));
   }
 
+  // Apply agent-releases migration (idempotent — IF NOT EXISTS). Must run
+  // after schema.sql (users) and settings_migration.sql (platform_settings).
+  const agentReleasesPath =
+    process.env.AGENT_RELEASES_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/agent_releases_migration.sql');
+  if (fs.existsSync(agentReleasesPath)) {
+    console.log('Applying agent-releases migration...');
+    await client.query(fs.readFileSync(agentReleasesPath, 'utf8'));
+  }
+
+  // Apply agent-update-status migration (idempotent — ADD COLUMN IF NOT
+  // EXISTS). Must run after schema.sql (servers).
+  const agentUpdateStatusPath =
+    process.env.AGENT_UPDATE_STATUS_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/agent_update_status_migration.sql');
+  if (fs.existsSync(agentUpdateStatusPath)) {
+    console.log('Applying agent-update-status migration...');
+    await client.query(fs.readFileSync(agentUpdateStatusPath, 'utf8'));
+  }
+
   const email = process.env.ADMIN_EMAIL || 'admin@example.com';
   const password = process.env.ADMIN_PASSWORD || 'admin123';
   const hash = await bcrypt.hash(password, 10);
