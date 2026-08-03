@@ -25,6 +25,7 @@ import { AuditService } from './audit.service';
 import { AuditController } from './audit.controller';
 import { AgentReleasesService } from './agent-releases.service';
 import { AgentReleasesController } from './agent-releases.controller';
+import { AgentUpdatesController } from './agent-updates.controller';
 
 /**
  * Release Management — repositories, versions, releases (draft builder, repo
@@ -64,6 +65,7 @@ import { AgentReleasesController } from './agent-releases.controller';
     EnvironmentController,
     AuditController,
     AgentReleasesController,
+    AgentUpdatesController,
   ],
   exports: [RepositoriesService, ReleasesService, DeploymentsService, GitService, ApprovalsService],
 })
