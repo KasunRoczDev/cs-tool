@@ -75,7 +75,13 @@ export default function Shell({ children }) {
         { href: '/releases',     label: '🚀 Releases' },
         { href: '/release-board', label: '🗂️ Release Board' },
         { href: '/deployments',  label: '🛳️ Deployments' },
+        { href: '/release-metrics', label: '📈 Release Metrics' },
+        { href: '/release-calendar', label: '📅 Release Calendar' },
+        { href: '/environments', label: '🌐 Environments' },
         { href: '/ai',           label: '🤖 AI Assistant' },
+        ...(role === 'admin' ? [{ href: '/release-workflows', label: '🧭 Workflow Config' }] : []),
+        ...(role === 'admin' ? [{ href: '/audit-log', label: '🧾 Audit Log' }] : []),
+        ...(role === 'admin' ? [{ href: '/agent-updates', label: '🛰️ Agent Updates' }] : []),
       ],
     },
     {
