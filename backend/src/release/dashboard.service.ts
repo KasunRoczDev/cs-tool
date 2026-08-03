@@ -105,4 +105,52 @@ export class DashboardService {
     const total = succeeded + failed;
     return { window_days: 7 as const, succeeded, failed, rate: total > 0 ? succeeded / total : null };
   }
+
+  /** Full dashboard payload: every widget, aggregated for one request. */
+  async overview(productId?: string) {
+    const [activeReleases, upcomingReleases, productionVersions, pipelineHealth] = await Promise.all([
+      this.activeReleases(productId),
+      this.upcomingReleases(productId),
+      this.productionVersions(productId),
+      this.pipelineHealth(productId),
+    ]);
+
+    const pendingByRelease = await Promise.all(activeReleases.map((r) => this.approvals.status(r.id)));
+    const pendingApprovals = pendingByRelease.flatMap((status, i) =>
+      status.approvers
+        .filter((a: any) => a.decision === 'pending')
+        .map((a: any) => ({
+          release_id: activeReleases[i].id,
+          version: activeReleases[i].version,
+          product_name: a.product_name,
+          role: a.role,
+          awaiting_email: a.email,
+        })),
+    );
+
+    const from = new Date();
+    const to = new Date(from.getTime() + 14 * 86_400_000);
+    const cal = await this.calendar.calendar(from.toISOString(), to.toISOString());
+    const miniCalendar = [
+      ...cal.releases.map((r: any) => ({ date: r.planned_date, type: 'release', label: `${r.version} planned` })),
+      ...cal.deployments.map((d: any) => ({
+        date: d.scheduled_at || d.finished_at || d.created_at,
+        type: 'deployment',
+        label: `${d.release_version} → ${d.channel_name}`,
+      })),
+      ...cal.freeze_windows.map((f: any) => ({ date: f.starts_at, type: 'freeze', label: f.name })),
+    ]
+      .filter((i) => i.date)
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .slice(0, 5);
+
+    return {
+      active_releases: activeReleases,
+      pending_approvals: pendingApprovals,
+      upcoming_releases: upcomingReleases,
+      production_versions: productionVersions,
+      pipeline_health: pipelineHealth,
+      mini_calendar: miniCalendar,
+    };
+  }
 }
