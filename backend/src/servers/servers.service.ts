@@ -34,7 +34,9 @@ export class ServersService {
     return this.pool
       .query(
         `SELECT s.id, s.name, s.hostname, s.ip_address, s.os, s.status, s.last_seen,
-                s.tags, s.created_at, s.product_id, p.name AS product_name
+                s.tags, s.created_at, s.product_id, p.name AS product_name,
+                s.agent_version, s.agent_update_status, s.agent_update_message,
+                s.agent_auto_update_excluded, s.agent_last_update_at
            FROM servers s
            LEFT JOIN products p ON p.id = s.product_id
           ORDER BY s.name`,
@@ -45,7 +47,9 @@ export class ServersService {
   async get(id: string) {
     const { rows } = await this.pool.query(
       `SELECT s.id, s.name, s.hostname, s.ip_address, s.os, s.status, s.last_seen,
-              s.tags, s.created_at, s.product_id, p.name AS product_name
+              s.tags, s.created_at, s.product_id, p.name AS product_name,
+              s.agent_version, s.agent_update_status, s.agent_update_message,
+              s.agent_auto_update_excluded, s.agent_last_update_at
          FROM servers s
          LEFT JOIN products p ON p.id = s.product_id
         WHERE s.id = $1`,
@@ -57,7 +61,13 @@ export class ServersService {
 
   async update(
     id: string,
-    patch: { name?: string; hostname?: string; tags?: Record<string, string>; product_id?: string | null },
+    patch: {
+      name?: string;
+      hostname?: string;
+      tags?: Record<string, string>;
+      product_id?: string | null;
+      agent_auto_update_excluded?: boolean;
+    },
   ) {
     const sets: string[] = [];
     const params: any[] = [];
@@ -67,6 +77,10 @@ export class ServersService {
     if (patch.product_id !== undefined) {
       params.push(patch.product_id === '' ? null : patch.product_id);
       sets.push(`product_id = $${params.length}`);
+    }
+    if (patch.agent_auto_update_excluded !== undefined) {
+      params.push(patch.agent_auto_update_excluded);
+      sets.push(`agent_auto_update_excluded = $${params.length}`);
     }
     if (sets.length === 0) return this.get(id);
     params.push(id);

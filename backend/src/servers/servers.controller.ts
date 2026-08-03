@@ -9,7 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { IsObject, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsObject, IsOptional, IsString } from 'class-validator';
 import { JwtAuthGuard, Roles } from '../common/jwt-auth.guard';
 import { ServersService } from './servers.service';
 
@@ -26,6 +26,7 @@ class UpdateServerDto {
   @IsOptional() @IsString() hostname?: string;
   @IsOptional() @IsObject() tags?: Record<string, string>;
   @IsOptional() @IsString() product_id?: string;
+  @IsOptional() @IsBoolean() agent_auto_update_excluded?: boolean;
 }
 
 @UseGuards(JwtAuthGuard)
