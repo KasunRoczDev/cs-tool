@@ -21,9 +21,13 @@ ALTER TABLE deploy_jobs ADD COLUMN IF NOT EXISTS wave INT NOT NULL DEFAULT 1;
 
 -- A canary's first wave succeeded and is paused awaiting a manual
 -- POST /deployments/:id/promote-wave before the remaining servers deploy.
--- Not referenced elsewhere in this file, so the PG12+ restriction on using a
--- freshly-added enum label in the same transaction doesn't apply here.
+-- The index below uses this same value, and Postgres forbids using a
+-- freshly-added enum label before it's committed ("unsafe use of new value"),
+-- so this needs its own transaction — migrate.js sends this whole file as one
+-- multi-statement batch (implicit transaction), and an explicit COMMIT here
+-- closes it out before the rest of the batch runs.
 ALTER TYPE deploy_status ADD VALUE IF NOT EXISTS 'awaiting_promotion';
+COMMIT;
 
 -- Widen the "only one active deployment per channel" backstop to also cover
 -- a paused canary — it still reserves the channel while awaiting promotion.
