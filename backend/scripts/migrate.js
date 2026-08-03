@@ -151,6 +151,14 @@ const bcrypt = require('bcryptjs');
     process.env.RELEASE_CALENDAR_MIGRATION_PATH ||
     path.resolve(__dirname, '../../database/release_calendar_migration.sql');
   if (fs.existsSync(calendarPath)) {
+    // The file itself later uses 'scheduled' in a CREATE INDEX WHERE clause, and
+    // Postgres rejects using a freshly-added enum value in the same multi-statement
+    // batch it was added in ("unsafe use of new value" — a bare COMMIT inside the
+    // batch string does NOT split it for this check, verified against a real run).
+    // Adding it here, as its own standalone query, is a separate round-trip that
+    // Postgres auto-commits immediately, so it's already durable by the time the
+    // file below re-issues the same (now no-op) ADD VALUE IF NOT EXISTS.
+    await client.query(`ALTER TYPE deploy_status ADD VALUE IF NOT EXISTS 'scheduled'`);
     console.log('Applying release-calendar migration...');
     await client.query(fs.readFileSync(calendarPath, 'utf8'));
   }
@@ -162,6 +170,9 @@ const bcrypt = require('bcryptjs');
     process.env.DEPLOYMENT_STRATEGY_MIGRATION_PATH ||
     path.resolve(__dirname, '../../database/deployment_strategy_migration.sql');
   if (fs.existsSync(strategyPath)) {
+    // Same "unsafe use of new value" pitfall as release_calendar_migration.sql above —
+    // this file's own CREATE INDEX later uses 'awaiting_promotion' in the same batch.
+    await client.query(`ALTER TYPE deploy_status ADD VALUE IF NOT EXISTS 'awaiting_promotion'`);
     console.log('Applying deployment-strategy migration...');
     await client.query(fs.readFileSync(strategyPath, 'utf8'));
   }
