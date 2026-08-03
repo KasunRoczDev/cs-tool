@@ -27,6 +27,15 @@ services:
       RBAC_MIGRATION_PATH: /database/rbac_migration.sql
       TRUSTED_DEVICES_MIGRATION_PATH: /database/trusted_devices_migration.sql
       WEBAUTHN_MIGRATION_PATH: /database/webauthn_migration.sql
+      DEPLOY_CANCEL_MIGRATION_PATH: /database/deploy_cancel_migration.sql
+      RELEASE_WORKFLOW_CONFIG_MIGRATION_PATH: /database/release_workflow_config_migration.sql
+      RELEASE_CALENDAR_MIGRATION_PATH: /database/release_calendar_migration.sql
+      DEPLOYMENT_STRATEGY_MIGRATION_PATH: /database/deployment_strategy_migration.sql
+      ENVIRONMENT_SECRETS_MIGRATION_PATH: /database/environment_secrets_migration.sql
+      APPROVAL_WORKFLOWS_MIGRATION_PATH: /database/approval_workflows_migration.sql
+      RECURRING_DEPLOYMENT_MIGRATION_PATH: /database/recurring_deployment_migration.sql
+      AGENT_RELEASES_MIGRATION_PATH: /database/agent_releases_migration.sql
+      AGENT_UPDATE_STATUS_MIGRATION_PATH: /database/agent_update_status_migration.sql
     volumes:
       - ./backend:/app
       - /app/node_modules

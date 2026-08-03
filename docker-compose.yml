@@ -24,19 +24,14 @@ services:
       DATABASE_URL: postgres://monitor:monitor@db:5432/monitoring
       JWT_SECRET: change-me-to-a-long-random-string
       DASHBOARD_ORIGIN: ${DASHBOARD_ORIGIN:-https://cs.oms.parallaxtec.dev}
-      SCHEMA_PATH: /app/database/schema.sql
-      PRODUCTS_MIGRATION_PATH: /app/database/products_migration.sql
-      SETTINGS_MIGRATION_PATH: /app/database/settings_migration.sql
-      NOTIF_MIGRATION_PATH: /app/database/notifications_migration.sql
-      TOPOLOGY_MIGRATION_PATH: /app/database/topology_migration.sql
-      MFA_MIGRATION_PATH: /app/database/mfa_migration.sql
-      RELEASE_MIGRATION_PATH: /app/database/release_migration.sql
-      REPO_TOKEN_MIGRATION_PATH: /app/database/repo_github_token_migration.sql
-      DEPLOY_JOBS_MIGRATION_PATH: /app/database/deploy_jobs_migration.sql
-      APPROVALS_MIGRATION_PATH: /app/database/release_approvals_migration.sql
-      RBAC_MIGRATION_PATH: /app/database/rbac_migration.sql
-      TRUSTED_DEVICES_MIGRATION_PATH: /app/database/trusted_devices_migration.sql
-      WEBAUTHN_MIGRATION_PATH: /app/database/webauthn_migration.sql
+      # No per-file *_MIGRATION_PATH vars: the whole ./database folder is bind-mounted
+      # at /database below (same pattern as docker-compose.dev.yml), and migrate.js's
+      # fallback path for every migration already resolves to /database/<file>.sql —
+      # so a new migration file just needs to exist on disk and be referenced in
+      # migrate.js, no compose-file edit required. (Explicit per-file mounts used to
+      # live here; they silently went stale every time a new migration was added,
+      # which is what caused "column r.planned_date does not exist" — the whole-folder
+      # mount can't go stale the same way.)
       # Must match the real domain the dashboard is served from in production
       # (e.g. WEBAUTHN_RP_ID=cs.oms.parallaxtec.dev, WEBAUTHN_ORIGIN=https://cs.oms.parallaxtec.dev)
       # or the browser rejects passkey requests with "'rp.id' cannot be used
@@ -62,20 +57,10 @@ services:
     ports:
       - "4000:4000"
     volumes:
-      # Mount the schema so migrate.js can apply it (build context can't reach ../database).
-      - ./database/schema.sql:/app/database/schema.sql:ro
-      - ./database/products_migration.sql:/app/database/products_migration.sql:ro
-      - ./database/notifications_migration.sql:/app/database/notifications_migration.sql:ro
-      - ./database/settings_migration.sql:/app/database/settings_migration.sql:ro
-      - ./database/topology_migration.sql:/app/database/topology_migration.sql:ro
-      - ./database/mfa_migration.sql:/app/database/mfa_migration.sql:ro
-      - ./database/release_migration.sql:/app/database/release_migration.sql:ro
-      - ./database/repo_github_token_migration.sql:/app/database/repo_github_token_migration.sql:ro
-      - ./database/deploy_jobs_migration.sql:/app/database/deploy_jobs_migration.sql:ro
-      - ./database/release_approvals_migration.sql:/app/database/release_approvals_migration.sql:ro
-      - ./database/rbac_migration.sql:/app/database/rbac_migration.sql:ro
-      - ./database/trusted_devices_migration.sql:/app/database/trusted_devices_migration.sql:ro
-      - ./database/webauthn_migration.sql:/app/database/webauthn_migration.sql:ro
+      # Mount the whole folder so migrate.js can apply every *.sql file it knows about
+      # (build context can't reach ../database) — see the comment above on why this is
+      # a directory mount rather than one line per file.
+      - ./database:/database:ro
     depends_on:
       db:
         condition: service_healthy
