@@ -12,10 +12,24 @@ mkdir -p /var/lib/monitor-agent
 chown -R monitor-agent:monitor-agent /var/lib/monitor-agent
 chmod 750 /var/lib/monitor-agent
 
+# Self-update working dirs: 'updates' is written by the unprivileged agent
+# process (downloaded .deb staging); 'backup' is written by the root-run
+# apply-update.sh (pre-update rollback copy).
+mkdir -p /var/lib/monitor-agent/updates /var/lib/monitor-agent/backup
+chown -R monitor-agent:monitor-agent /var/lib/monitor-agent/updates
+chown -R root:root /var/lib/monitor-agent/backup
+
+# sudoers.d perms must be exactly 0440 root:root or sudo ignores the file —
+# dpkg's own file-mode handling isn't guaranteed to land on that, so assert
+# it explicitly.
+chown root:root /etc/sudoers.d/monitor-agent-updater
+chmod 0440 /etc/sudoers.d/monitor-agent-updater
+
 # If a purge+reinstall wiped the real config back to the stock placeholder,
-# restore the copy prerm stashed before removal (see prerm for why).
+# restore the copy prerm stashed before removal (see prerm for why it's in
+# /var/backups and not under /etc/monitor-agent).
 CONF=/etc/monitor-agent/agent.yaml
-BACKUP=/etc/monitor-agent/agent.yaml.bak
+BACKUP=/var/backups/monitor-agent-agent.yaml.bak
 if [ -f "$BACKUP" ] && [ -f "$CONF" ] && grep -q 'REPLACE_WITH_YOUR_API_KEY' "$CONF" 2>/dev/null; then
   cp "$BACKUP" "$CONF"
   echo " Restored previous /etc/monitor-agent/agent.yaml from backup."
@@ -25,7 +39,6 @@ fi
 chown -R root:monitor-agent /etc/monitor-agent
 chmod 750 /etc/monitor-agent
 chmod 640 /etc/monitor-agent/agent.yaml || true
-chmod 640 /etc/monitor-agent/agent.yaml.bak 2>/dev/null || true
 
 # Install node deps into the app dir (js-yaml)
 if [ -f /usr/lib/monitor-agent/package.json ]; then

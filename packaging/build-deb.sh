@@ -27,6 +27,15 @@ cp "$AGENT/config/agent.example.yaml" "$STAGE/etc/monitor-agent/agent.yaml"
 # --- systemd unit ---
 cp "$PKGDIR/systemd/monitor-agent.service" "$STAGE/lib/systemd/system/"
 
+# --- self-update assets ---
+mkdir -p "$STAGE/usr/lib/monitor-agent/scripts"
+cp "$AGENT/scripts/apply-update.sh" "$STAGE/usr/lib/monitor-agent/scripts/"
+chmod 0755 "$STAGE/usr/lib/monitor-agent/scripts/apply-update.sh"
+cp "$PKGDIR/agent-update-signing-pub.pem" "$STAGE/etc/monitor-agent/update-signing-pub.pem"
+mkdir -p "$STAGE/etc/sudoers.d"
+cp "$PKGDIR/debian/monitor-agent-updater.sudoers" "$STAGE/etc/sudoers.d/monitor-agent-updater"
+chmod 0440 "$STAGE/etc/sudoers.d/monitor-agent-updater"
+
 # --- control files ---
 cp "$PKGDIR/debian/control"    "$STAGE/DEBIAN/control"
 cp "$PKGDIR/debian/conffiles"  "$STAGE/DEBIAN/conffiles"
