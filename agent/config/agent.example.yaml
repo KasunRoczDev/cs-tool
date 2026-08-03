@@ -39,6 +39,16 @@ deploy:
   script: /opt/monitor-agent/scripts/deploy-release.sh
   healthcheck_url: ""                      # optional URL probed as the final step
 
+# Agent self-update — periodically checks the platform for a newer agent
+# version and applies it automatically (download -> verify Ed25519 signature
+# -> sudo apply-update.sh -> restart -> health-check, with auto-rollback on
+# failure). Requires the platform's global "Agent auto-update" setting to
+# also be on, and this server not to be individually excluded (both are
+# dashboard-managed, not set here).
+self_update:
+  enabled: false
+  check_interval: 3600   # seconds between update checks
+
 # TLS verification — keep true in production. Set false only for self-signed lab certs.
 tls_verify: true
 

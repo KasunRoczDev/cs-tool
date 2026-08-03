@@ -10,6 +10,7 @@ const { startSecurity } = require('./collectors/security');
 const { startLynis } = require('./collectors/lynis');
 const { Sender } = require('./sender');
 const { DeployRunner } = require('./deploy');
+const { Updater } = require('./updater');
 
 const CONFIG_PATH =
   process.env.MONITOR_CONFIG || '/etc/monitor-agent/agent.yaml';
@@ -86,6 +87,12 @@ function main() {
     stopDeploy = new DeployRunner(cfg).start();
   }
 
+  // Self-update: periodically checks for a newer agent version and applies it.
+  let stopUpdater = () => {};
+  if (cfg.self_update && cfg.self_update.enabled) {
+    stopUpdater = new Updater(cfg).start();
+  }
+
   const shutdown = async (sig) => {
     console.log(`[agent] ${sig} received, flushing...`);
     clearInterval(metricsTimer);
@@ -94,6 +101,7 @@ function main() {
     stopSecurity();
     stopLynis();
     stopDeploy();
+    stopUpdater();
     await sender.flush().catch(() => {});
     process.exit(0);
   };
