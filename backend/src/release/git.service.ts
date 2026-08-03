@@ -34,6 +34,15 @@ export interface GitCommit {
   url: string;
 }
 
+export interface GitCheckRun {
+  name: string;
+  status: string; // queued | in_progress | completed
+  conclusion: string | null; // success | failure | neutral | cancelled | skipped | timed_out | action_required | stale | null
+  url: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+
 const GH_API = 'https://api.github.com';
 
 @Injectable()
@@ -272,6 +281,32 @@ export class GitService {
       author: c.commit.author?.name ?? 'unknown',
       date: c.commit.author?.date ?? '',
       url: c.html_url,
+    }));
+  }
+
+  /**
+   * CI/quality-gate results for a commit, via GitHub's Check Runs API. This is
+   * how "testing integration" is surfaced honestly — the platform doesn't run
+   * tests/SonarQube/Playwright itself, but GitHub already aggregates whatever
+   * posts a check run for that commit (GitHub Actions, and any third-party
+   * integration configured to report as a GitHub check, e.g. SonarQube Cloud,
+   * Codecov) — this just reads that existing signal.
+   */
+  async getCheckRuns(repo: RepoRef, token: string, sha: string): Promise<GitCheckRun[]> {
+    const { owner, repo: name } = this.parseGithub(repo.remote_url);
+    const data = await this.gh<{
+      check_runs: Array<{
+        name: string; status: string; conclusion: string | null;
+        html_url: string; started_at: string | null; completed_at: string | null;
+      }>;
+    }>(`/repos/${owner}/${name}/commits/${sha}/check-runs?per_page=100`, token);
+    return (data.check_runs || []).map((c) => ({
+      name: c.name,
+      status: c.status,
+      conclusion: c.conclusion,
+      url: c.html_url,
+      started_at: c.started_at,
+      completed_at: c.completed_at,
     }));
   }
 

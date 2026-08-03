@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { DatabaseModule } from '../database/database.module';
 import { ReleaseModule } from '../release/release.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 import { AiService } from './ai.service';
 import { LlmService } from './llm.service';
 import { AiController } from './ai.controller';
@@ -15,6 +16,7 @@ import { AiController } from './ai.controller';
   imports: [
     DatabaseModule,
     ReleaseModule,
+    NotificationsModule,
     JwtModule.register({ secret: process.env.JWT_SECRET ?? 'dev-secret' }),
   ],
   providers: [AiService, LlmService],

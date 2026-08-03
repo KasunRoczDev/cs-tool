@@ -4,8 +4,9 @@ import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 
 const STATUS_COLORS = {
-  pending: '#eab308', approved: '#3b82f6', in_progress: '#06b6d4',
-  succeeded: '#22c55e', failed: '#ef4444', rolled_back: '#a855f7', cancelled: '#64748b',
+  scheduled: '#8b5cf6', pending: '#eab308', approved: '#3b82f6', in_progress: '#06b6d4',
+  awaiting_promotion: '#f97316', succeeded: '#22c55e', failed: '#ef4444',
+  rolled_back: '#a855f7', cancelled: '#64748b',
 };
 
 function StatusBadge({ status }) {
@@ -70,7 +71,12 @@ export default function DeploymentsPage() {
           <div key={channel.id} style={{
             flex: '1 0 200px', border: '1px solid var(--border,#3334)', borderRadius: 10, padding: 14,
           }}>
-            <div style={{ fontWeight: 700, marginBottom: 6 }}>{channel.name}</div>
+            <div style={{ fontWeight: 700, marginBottom: 6 }}>
+              {channel.name}
+              {channel.locked && (
+                <span title={channel.locked_reason || 'Locked'} style={{ marginLeft: 6, fontSize: 12, color: '#ef4444' }}>🔒</span>
+              )}
+            </div>
             <div style={{ fontSize: 13, color: 'var(--muted)' }}>current</div>
             <div style={{ fontSize: 18, fontWeight: 700 }}>{current?.release_version || '—'}</div>
             {current?.previous_version && (
@@ -82,6 +88,12 @@ export default function DeploymentsPage() {
             </div>
             {latest?.status === 'pending' && (
               <button style={{ marginTop: 8 }} onClick={() => guard(() => api.approveDeployment(latest.id), 'Approved & deployed')}>Approve</button>
+            )}
+            {latest?.status === 'awaiting_promotion' && (
+              <button style={{ marginTop: 8, background: '#f97316' }}
+                onClick={() => guard(() => api.promoteWave(latest.id), 'Promoted to next wave')}>
+                Promote (wave {latest.current_wave}/{latest.total_waves})
+              </button>
             )}
             {latest?.status === 'succeeded' && latest.rollback_target && (
               <button style={{ marginTop: 8, background: '#a855f7' }} onClick={() => guard(() => api.rollbackDeployment(latest.id), `Rolled back to ${latest.rollback_target}`)}>Rollback</button>
@@ -101,14 +113,28 @@ export default function DeploymentsPage() {
               <tr key={d.id}>
                 <td><b>{d.release_version}</b></td>
                 <td>{d.channel_name}</td>
-                <td><StatusBadge status={d.status} /></td>
+                <td>
+                  <StatusBadge status={d.status} />
+                  {d.total_waves > 1 && (
+                    <span style={{ marginLeft: 6, fontSize: 11, color: 'var(--muted)' }}>
+                      wave {d.current_wave}/{d.total_waves} ({d.strategy})
+                    </span>
+                  )}
+                </td>
                 <td>{d.current_version}</td>
                 <td>{d.rollback_target || '—'}</td>
                 <td>{d.triggered_by_email || '—'}</td>
-                <td>{new Date(d.created_at).toLocaleString()}</td>
+                <td>
+                  {d.status === 'scheduled' && d.scheduled_at
+                    ? <>scheduled for <b>{new Date(d.scheduled_at).toLocaleString()}</b></>
+                    : new Date(d.created_at).toLocaleString()}
+                </td>
                 <td style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {d.status === 'pending' && <button onClick={() => guard(() => api.approveDeployment(d.id), 'Approved')}>Approve</button>}
-                  {['pending', 'approved', 'in_progress'].includes(d.status) && (
+                  {d.status === 'awaiting_promotion' && (
+                    <button style={{ background: '#f97316' }} onClick={() => guard(() => api.promoteWave(d.id), 'Promoted to next wave')}>Promote</button>
+                  )}
+                  {['scheduled', 'pending', 'approved', 'in_progress', 'awaiting_promotion'].includes(d.status) && (
                     <button style={{ background: '#64748b' }} onClick={() => guard(() => api.cancelDeployment(d.id), 'Cancelled')}>Cancel</button>
                   )}
                   {d.status === 'failed' && <button style={{ background: '#f59e0b' }} onClick={() => guard(() => api.retryDeployment(d.id), 'Retrying')}>Retry</button>}
@@ -122,32 +148,41 @@ export default function DeploymentsPage() {
                   <td colSpan="8" style={{ background: 'var(--panel,#0001)' }}>
                     {jobs.length === 0 ? (
                       <span className="empty">No agent jobs — this deployment is tracking-only (no servers selected).</span>
-                    ) : (
-                      <table className="grid" style={{ margin: 0 }}>
-                        <thead><tr><th>Server</th><th>Repo</th><th>Env</th><th>Branch</th><th>Status</th><th>Pipeline</th></tr></thead>
-                        <tbody>
-                          {jobs.map((j) => (
-                            <tr key={j.id}>
-                              <td><b>{j.server_name}</b></td>
-                              <td>{j.repo_slug}</td>
-                              <td>{j.env_path}</td>
-                              <td>{j.branch || '—'}</td>
-                              <td><StatusBadge status={j.status} />{j.error && <div style={{ color: 'var(--crit)', fontSize: 11 }}>{j.error}</div>}</td>
-                              <td style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                                {(j.steps || []).map((s) => (
-                                  <span key={s.name} title={s.status} style={{
-                                    fontSize: 11, padding: '1px 6px', borderRadius: 6,
-                                    background: s.status === 'succeeded' ? '#16331f' : s.status === 'fail' ? '#3a1620' : '#2a2f3a',
-                                    color: s.status === 'succeeded' ? '#22c55e' : s.status === 'fail' ? '#ef4444' : '#94a3b8',
-                                  }}>{s.name}</span>
-                                ))}
-                                {(!j.steps || j.steps.length === 0) && <span className="muted" style={{ fontSize: 12 }}>—</span>}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    )}
+                    ) : (() => {
+                      const waveGroups = jobs.reduce((acc, j) => { (acc[j.wave || 1] = acc[j.wave || 1] || []).push(j); return acc; }, {});
+                      const multiWave = Object.keys(waveGroups).length > 1;
+                      return Object.entries(waveGroups).map(([wave, waveJobs]) => (
+                        <div key={wave} style={{ marginBottom: 8 }}>
+                          {multiWave && (
+                            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--muted)', margin: '4px 0' }}>Wave {wave}</div>
+                          )}
+                          <table className="grid" style={{ margin: 0 }}>
+                            <thead><tr><th>Server</th><th>Repo</th><th>Env</th><th>Branch</th><th>Status</th><th>Pipeline</th></tr></thead>
+                            <tbody>
+                              {waveJobs.map((j) => (
+                                <tr key={j.id}>
+                                  <td><b>{j.server_name}</b></td>
+                                  <td>{j.repo_slug}</td>
+                                  <td>{j.env_path}</td>
+                                  <td>{j.branch || '—'}</td>
+                                  <td><StatusBadge status={j.status} />{j.error && <div style={{ color: 'var(--crit)', fontSize: 11 }}>{j.error}</div>}</td>
+                                  <td style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                                    {(j.steps || []).map((s) => (
+                                      <span key={s.name} title={s.status} style={{
+                                        fontSize: 11, padding: '1px 6px', borderRadius: 6,
+                                        background: s.status === 'succeeded' ? '#16331f' : s.status === 'fail' ? '#3a1620' : '#2a2f3a',
+                                        color: s.status === 'succeeded' ? '#22c55e' : s.status === 'fail' ? '#ef4444' : '#94a3b8',
+                                      }}>{s.name}</span>
+                                    ))}
+                                    {(!j.steps || j.steps.length === 0) && <span className="muted" style={{ fontSize: 12 }}>—</span>}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ));
+                    })()}
                   </td>
                 </tr>
               )}

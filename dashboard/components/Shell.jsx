@@ -71,6 +71,7 @@ export default function Shell({ children }) {
     {
       section: 'Release Management',
       items: [
+        { href: '/release-dashboard', label: '🏠 Release Dashboard' },
         { href: '/repositories', label: '📚 Repositories' },
         { href: '/releases',     label: '🚀 Releases' },
         { href: '/release-board', label: '🗂️ Release Board' },

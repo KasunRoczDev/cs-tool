@@ -70,6 +70,10 @@ class DeployRunner {
     if (job.commit_sha) args.push('--commit', job.commit_sha);
     const cmds = Array.isArray(job.custom_commands) ? job.custom_commands : [];
     for (const c of cmds) args.push('--cmd', String(c));
+    // "KEY=VALUE" strings resolved server-side (channel/product env vars +
+    // decrypted secrets) — written to a .env file by the script, never logged.
+    const envVars = Array.isArray(job.env_vars) ? job.env_vars : [];
+    for (const kv of envVars) args.push('--env-var', String(kv));
 
     const env = { ...process.env };
     if (this.dcfg.healthcheck_url) env.HEALTHCHECK_URL = this.dcfg.healthcheck_url;

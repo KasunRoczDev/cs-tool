@@ -4,6 +4,7 @@ import { PG_POOL } from '../database/database.module';
 import { GitService } from '../release/git.service';
 import { ReleasesService } from '../release/releases.service';
 import { decryptSecret } from '../common/crypto.util';
+import { NotificationsService } from '../notifications/notifications.service';
 import { LlmService } from './llm.service';
 
 const clamp = (n: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, Math.round(n)));
@@ -22,11 +23,17 @@ const BREAKING = [
 
 @Injectable()
 export class AiService {
+  // Per (release, channel) throttle so re-viewing the AI page doesn't re-fire
+  // the same alert on every read — releaseRisk() is a plain GET, not an event.
+  private readonly highRiskNotifiedAt = new Map<string, number>();
+  private readonly HIGH_RISK_NOTIFY_COOLDOWN_MS = 6 * 3_600_000; // 6h
+
   constructor(
     @Inject(PG_POOL) private readonly pool: Pool,
     private readonly git: GitService,
     private readonly releases: ReleasesService,
     private readonly llm: LlmService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   status() {
@@ -97,7 +104,23 @@ export class AiService {
         `Computed risk score ${score}/100 (${lv}). Give a brief risk assessment and the single most important precaution.`,
     );
 
+    if (lv === 'high') this.notifyHighRisk(releaseId, channel, rel.version, score, recommendation);
+
     return { release_version: rel.version, channel, score, level: lv, factors, recommendation, narrative };
+  }
+
+  private notifyHighRisk(releaseId: string, channel: string, version: string, score: number, recommendation: string) {
+    const key = `${releaseId}:${channel}`;
+    const last = this.highRiskNotifiedAt.get(key) ?? 0;
+    if (Date.now() - last < this.HIGH_RISK_NOTIFY_COOLDOWN_MS) return;
+    this.highRiskNotifiedAt.set(key, Date.now());
+    this.notifications
+      .notifyEvent('release.ai_high_risk', {
+        title: `⚠️ High risk release — ${version} → ${channel}`,
+        lines: [`Risk score ${score}/100.`, recommendation],
+        severity: 'critical',
+      })
+      .catch(() => undefined);
   }
 
   // ── 2) Predict deployment failure ──────────────────────────────────────────

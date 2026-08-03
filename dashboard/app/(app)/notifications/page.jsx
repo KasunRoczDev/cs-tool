@@ -23,12 +23,14 @@ const PLATFORM_EVENTS = [
   { key: 'deployment.failed', label: 'Deployment failed' },
   { key: 'release.approved', label: 'Release approved' },
   { key: 'hotfix.created', label: 'Hotfix created' },
+  { key: 'release.ai_high_risk', label: 'AI flags a release as high risk' },
 ];
-const WEBHOOK_TYPES = ['discord', 'slack', 'teams'];
+const WEBHOOK_TYPES = ['discord', 'slack', 'teams', 'webhook'];
 const WEBHOOK_HELP = {
   discord: 'Discord: Channel → Edit Channel → Integrations → Webhooks → New Webhook → Copy URL.',
   slack: 'Slack: create an Incoming Webhook app and paste the https://hooks.slack.com/services/… URL.',
   teams: 'Teams: channel → ⋯ → Connectors → Incoming Webhook (or Workflows) → copy the URL.',
+  webhook: 'Generic: any URL that accepts a POST with a JSON body ({event, title, lines, severity, sent_at}).',
 };
 
 const STATUS_COLORS = { sent: '#34d399', failed: '#f87171', suppressed: '#94a3b8' };
@@ -113,13 +115,14 @@ function ChannelForm({ initial, onSave, onCancel }) {
             <option value="discord">Discord</option>
             <option value="slack">Slack</option>
             <option value="teams">Microsoft Teams</option>
+            <option value="webhook">Webhook (generic)</option>
           </select>
         </label>
 
         {isWebhook ? (
           <>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
-              {form.type === 'teams' ? 'Microsoft Teams' : form.type === 'slack' ? 'Slack' : 'Discord'} webhook URL
+              {form.type === 'teams' ? 'Microsoft Teams' : form.type === 'slack' ? 'Slack' : form.type === 'webhook' ? 'Generic' : 'Discord'} webhook URL
               <input value={form.webhook_url} onChange={(e) => set('webhook_url', e.target.value)}
                 placeholder="https://…" />
             </label>

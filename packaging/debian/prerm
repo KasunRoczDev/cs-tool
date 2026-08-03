@@ -2,14 +2,16 @@
 set -e
 
 CONF=/etc/monitor-agent/agent.yaml
-BACKUP=/etc/monitor-agent/agent.yaml.bak
+BACKUP=/var/backups/monitor-agent-agent.yaml.bak
 
 # dpkg deletes conffiles on purge (dpkg -P / apt purge), which would otherwise
-# wipe a configured server_url/api_key. Stash a copy here (not a tracked
-# conffile, so it survives) — postinst restores it if a later install lands
-# back on the stock placeholder.
+# wipe a configured server_url/api_key. Stash a copy in /var/backups — NOT
+# under /etc/monitor-agent, because purge removes that whole directory
+# (including untracked files in it, not just the declared conffile) — so
+# postinst can restore it if a later install lands back on the stock
+# placeholder.
 if [ -f "$CONF" ] && ! grep -q 'REPLACE_WITH_YOUR_API_KEY' "$CONF" 2>/dev/null; then
-  cp "$CONF" "$BACKUP" 2>/dev/null || true
+  cp "$CONF" "$BACKUP" 2>/dev/null && chmod 600 "$BACKUP" 2>/dev/null || true
 fi
 
 if [ -d /run/systemd/system ]; then

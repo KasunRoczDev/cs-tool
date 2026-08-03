@@ -18,7 +18,14 @@ async function bootstrap() {
 
   app.use(helmet());
   app.use(cookieParser());
-  app.use(express.json({ limit: '100mb' }));
+  app.use(express.json({
+    limit: '100mb',
+    // Stash the exact bytes received alongside the parsed body. Webhook signature
+    // verification (webhooks.controller.ts) must HMAC these raw bytes — re-serializing
+    // the parsed object with JSON.stringify is not guaranteed to reproduce what the
+    // provider actually signed (key order, numeric precision, escaping can all differ).
+    verify: (req: any, _res, buf) => { req.rawBody = buf; },
+  }));
   app.use(express.urlencoded({ 
     limit: '100mb',
     extended: true 

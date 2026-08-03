@@ -3,238 +3,264 @@
 import { useState } from 'react';
 import { useDashboard } from '@/lib/useDashboard';
 
+// Mirrors agent/INSTALL.md — the packaged .deb install flow. Keep these two
+// in sync; this page is the in-app copy of that guide, not an alternate one.
 const steps = [
   {
     id: 1,
     title: 'Prerequisites',
-    description: 'Ensure your Ubuntu server meets these requirements',
+    description: 'What the target server and build machine need',
     content: (
       <div>
-        <h4 style={{ marginTop: 0 }}>Required:</h4>
+        <h4 style={{ marginTop: 0 }}>Target server:</h4>
         <ul>
-          <li>Ubuntu 20.04 LTS or later</li>
-          <li>sudo privileges</li>
-          <li>Internet connectivity to backend server</li>
-          <li>Backend server address (e.g., http://YOUR_BACKEND_HOST:4000)</li>
-          <li>API Key from monitoring platform</li>
+          <li>Ubuntu 20.04+ / Debian 11+ (other systemd Linux works too)</li>
+          <li>Node.js ≥ 18 (the .deb depends on it — <code>apt-get -f install</code> pulls it in if missing)</li>
+          <li>sudo / root</li>
+          <li>Outbound HTTPS (443) to this platform&apos;s <code>server_url</code></li>
         </ul>
-        <h4>System Requirements:</h4>
+        <h4>Build machine:</h4>
         <ul>
-          <li>2+ CPU cores (limited to 15% per systemd config)</li>
-          <li>256MB+ RAM (limited to 128MB per systemd config)</li>
-          <li>100MB disk space in /var/lib/</li>
+          <li>Any Ubuntu/Debian box with <code>dpkg-deb</code> and <code>bash</code> — a CI runner or your workstation, doesn&apos;t need to be the target server</li>
+        </ul>
+        <h4>Optional, only if you enable the matching collector (Step 6):</h4>
+        <ul>
+          <li><code>lynis</code>, <code>libfcgi-bin</code> — host-hardening audit / PHP-FPM socket probe</li>
+          <li><code>postgresql-client</code>, <code>redis-tools</code>, <code>openssl</code>, <code>docker</code> — service-metrics probes</li>
         </ul>
       </div>
     ),
   },
   {
     id: 2,
-    title: 'Update System & Install Node.js',
-    description: 'Update packages and install Node.js runtime',
-    code: `# Update package lists
-sudo apt update
-sudo apt upgrade -y
-
-# Install Node.js (LTS version)
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
-sudo apt install -y nodejs
-
-# Verify installation
-node --version
-npm --version`,
+    title: 'Get a server API key',
+    description: 'Issued once per server from this dashboard',
+    content: (
+      <div>
+        <p>
+          Click <strong>+ Add server</strong> to create the server record — the response includes
+          a one-time <code>agt_...</code> API key. Copy it now; it isn&apos;t stored in plaintext
+          and can&apos;t be viewed again later.
+        </p>
+        <p>
+          If it&apos;s lost before it makes it into <code>agent.yaml</code> (e.g. the config file
+          was wiped by a reinstall), open that server&apos;s detail page and use{' '}
+          <strong>Regenerate API key</strong> instead of re-registering the server — it issues a
+          fresh key in place and keeps the server&apos;s existing history.
+        </p>
+        <p style={{ color: 'var(--muted)', fontSize: '13px' }}>Keep the key secret — it&apos;s the agent&apos;s only credential.</p>
+      </div>
+    ),
   },
   {
     id: 3,
-    title: 'Create System User',
-    description: 'Create dedicated system user for the monitoring agent',
-    code: `# Create system user (no login, no home directory)
-sudo useradd --system --no-create-home --shell /usr/sbin/nologin monitor-agent
+    title: 'Build the .deb package',
+    description: 'From the platform repository, on the build machine',
+    code: `cd packaging
+chmod +x build-deb.sh debian/postinst debian/prerm debian/postrm
+./build-deb.sh
+# -> dist/monitor-agent_<version>_all.deb
 
-# Create agent directories
-sudo mkdir -p /opt/monitor-agent /var/lib/monitor-agent
-
-# Set proper permissions and ownership
-sudo chown -R monitor-agent:monitor-agent /var/lib/monitor-agent
-sudo chmod 700 /var/lib/monitor-agent
-
-# Verify user was created
-id monitor-agent`,
+# Copy it to the target server
+scp dist/monitor-agent_*_all.deb user@your-server:/tmp/`,
   },
   {
     id: 4,
-    title: 'Prepare Build Environment',
-    description: 'Setup packaging and build directory',
-    code: `# Navigate to build directory
-cd /var/www/
+    title: 'Install on the target server',
+    description: 'Installs as a systemd service, does not start it yet',
+    code: `sudo dpkg -i /tmp/monitor-agent_*_all.deb
 
-# Create packaging directory
-mkdir packaging
-cd packaging
-
-# Make scripts executable
-chmod +x build-deb.sh debian/postinst debian/prerm debian/postrm
-
-# Verify structure
-ls -la`,
+# If nodejs (or another dependency) is missing, let apt resolve it:
+sudo apt-get -f install`,
+    content: (
+      <div>
+        <p style={{ marginTop: 0 }}>The package&apos;s <code>postinst</code> automatically:</p>
+        <ul>
+          <li>creates the dedicated <code>monitor-agent</code> system user (no login, no home)</li>
+          <li>creates the offline buffer dir <code>/var/lib/monitor-agent/</code></li>
+          <li>locks down <code>/etc/monitor-agent/</code> and <code>agent.yaml</code></li>
+          <li>installs the agent&apos;s Node dependencies</li>
+          <li>enables the service — but does not start it yet, since it isn&apos;t configured</li>
+        </ul>
+      </div>
+    ),
   },
   {
     id: 5,
-    title: 'Copy Agent Script',
-    description: 'Copy the monitor-agent.js script from repository',
-    code: `# Create agent directory
-sudo mkdir -p /opt/monitor-agent
-
-# Copy the agent script from repository
-# Navigate to your repository/packaging directory
-cd /var/www/packaging
-
-# Copy the standalone monitor-agent.js to /opt/monitor-agent/
-sudo cp agent/standalone/monitor-agent.js /opt/monitor-agent/monitor-agent.js
-
-# Verify the file was copied
-ls -la /opt/monitor-agent/monitor-agent.js
-
-# Check that it's a valid Node.js script
-head -5 /opt/monitor-agent/monitor-agent.js`,
+    title: 'Configure the agent',
+    description: 'Set the two required fields',
+    code: `sudo nano /etc/monitor-agent/agent.yaml`,
+    content: (
+      <div>
+        <pre style={{ background: 'var(--panel-2)', padding: '12px', borderRadius: '8px', fontSize: '12px', overflow: 'auto' }}>
+{`server_url: https://your-platform-host   # this platform's base URL (HTTPS in prod)
+api_key: agt_xxxxxxxxxxxxxxxxxxxx        # the key from Step 2`}
+        </pre>
+        <p>
+          <code>api_key</code> is mandatory — the agent refuses to start without it (it can also be
+          supplied via the <code>MONITOR_API_KEY</code> environment variable instead). Keep{' '}
+          <code>tls_verify: true</code> in production; only set it to <code>false</code> against a
+          self-signed lab cert.
+        </p>
+      </div>
+    ),
   },
   {
     id: 6,
-    title: 'Set Permissions',
-    description: 'Configure proper file permissions and ownership',
-    code: `# Set ownership to monitor-agent user
-sudo chown -R monitor-agent:monitor-agent /opt/monitor-agent
-
-# Make the script executable
-sudo chmod +x /opt/monitor-agent/monitor-agent.js
-
-# Set proper directory permissions
-sudo chmod 750 /opt/monitor-agent
-
-# Verify permissions
-ls -la /opt/monitor-agent/`,
+    title: 'Optional collectors',
+    description: 'PHP-FPM, Lynis, and service/application metrics — all off by default',
+    content: (
+      <div>
+        <p style={{ marginTop: 0, color: 'var(--muted)', fontSize: '13px' }}>
+          Every collector below is opt-in; leave a section out and that data just stays blank on
+          the dashboard. See <code>agent/INSTALL.md</code> in the repository for the full reference,
+          including every service-metrics probe (Postgres, Redis, BullMQ, Docker, TLS expiry).
+        </p>
+        <h4>PHP-FPM pool status</h4>
+        <pre style={{ background: 'var(--panel-2)', padding: '12px', borderRadius: '8px', fontSize: '12px', overflow: 'auto' }}>
+{`fpm:
+  enabled: true
+  pools:
+    - name: www
+      status_url: http://127.0.0.1/fpm-status   # restrict to localhost`}
+        </pre>
+        <h4>Lynis host-hardening audit</h4>
+        <pre style={{ background: 'var(--panel-2)', padding: '12px', borderRadius: '8px', fontSize: '12px', overflow: 'auto' }}>
+{`lynis:
+  enabled: true
+  run: true               # agent runs \`lynis audit system\` itself
+  interval_hours: 24`}
+        </pre>
+        <h4>Service / application metrics</h4>
+        <pre style={{ background: 'var(--panel-2)', padding: '12px', borderRadius: '8px', fontSize: '12px', overflow: 'auto' }}>
+{`service_metrics:
+  enabled: true
+  postgres:
+    url: postgres://user:pass@127.0.0.1:5432/yourdb
+  redis:
+    url: redis://127.0.0.1:6379`}
+        </pre>
+        <p style={{ fontSize: '12px', color: 'var(--muted)' }}>Restart after any config change (Step 7).</p>
+      </div>
+    ),
   },
   {
     id: 7,
-    title: 'Create Systemd Service',
-    description: 'Create systemd service for automatic startup and management',
-    code: `# Create systemd service file
-sudo tee /etc/systemd/system/monitor-agent.service > /dev/null <<'EOF'
-[Unit]
-Description=Monitor Agent - system & security telemetry collector
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=monitor-agent
-Group=monitor-agent
-ExecStart=/usr/bin/node /opt/monitor-agent/monitor-agent.js
-Environment=MONITOR_SERVER_URL=http://YOUR_BACKEND_HOST:4000
-Environment=MONITOR_API_KEY=PASTE_YOUR_API_KEY
-Restart=always
-RestartSec=5
-CPUQuota=15%
-MemoryMax=128M
-NoNewPrivileges=true
-ReadWritePaths=/var/lib/monitor-agent
-SupplementaryGroups=adm systemd-journal
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Reload systemd daemon
-sudo systemctl daemon-reload`,
+    title: 'Start and enable the service',
+    description: 'Enable at boot and start now',
+    code: `sudo systemctl enable --now monitor-agent
+sudo systemctl status monitor-agent`,
+    content: (
+      <p>
+        The unit auto-restarts on failure and is resource-capped (15% CPU, 128MB RAM) and hardened
+        (<code>NoNewPrivileges</code>, <code>ProtectSystem=strict</code>, <code>ProtectHome</code>),
+        with read access to auth logs/journal via the <code>adm</code> and{' '}
+        <code>systemd-journal</code> groups.
+      </p>
+    ),
   },
   {
     id: 8,
-    title: 'Configure Environment Variables',
-    description: 'Set backend URL and API key in the service',
-    code: `# Edit the service file to set your backend details
-sudo nano /etc/systemd/system/monitor-agent.service
+    title: 'Verify it&#39;s working',
+    description: 'Confirm the agent connected and is sending data',
+    code: `journalctl -u monitor-agent -f
+# look for: [agent] starting -> https://your-platform-host
 
-# Update these lines with your values:
-# Environment=MONITOR_SERVER_URL=http://YOUR_BACKEND_HOST:4000
-# Environment=MONITOR_API_KEY=PASTE_YOUR_API_KEY
+systemctl is-active monitor-agent
 
-# Example:
-# Environment=MONITOR_SERVER_URL=http://192.168.1.100:4000
-# Environment=MONITOR_API_KEY=sk_live_abc123def456xyz
-
-# After editing, reload systemd
-sudo systemctl daemon-reload`,
+# offline buffer should stay small/empty once the server is reachable
+ls -la /var/lib/monitor-agent/`,
+    content: (
+      <p>
+        Then confirm the server shows <strong>online</strong> with incoming metrics on this
+        dashboard — data should arrive within <code>send_interval</code> (default 30s).
+      </p>
+    ),
   },
   {
     id: 9,
-    title: 'Enable & Start Service',
-    description: 'Enable the service to start on boot and start it now',
-    code: `# Enable service to start on system boot
-sudo systemctl enable monitor-agent
-
-# Start the service immediately
-sudo systemctl start monitor-agent
-
-# Check service status
-sudo systemctl status monitor-agent --no-pager`,
+    title: 'Upgrading',
+    description: 'Rebuild, copy over, reinstall',
+    code: `sudo dpkg -i monitor-agent_<new-version>_all.deb
+sudo systemctl restart monitor-agent   # dpkg does not restart a running service`,
+    content: (
+      <p>
+        <code>agent.yaml</code> is a conffile, so <code>server_url</code>/<code>api_key</code> are
+        preserved across upgrades — dpkg only prompts if <em>both</em> you and the new package
+        changed it. Keep your version (default) unless you specifically want the packaged
+        defaults. Avoid <code>dpkg -P</code> / <code>apt purge</code> for routine updates — purge
+        deliberately deletes the config; use plain <code>dpkg -i</code> or <code>dpkg -r</code>{' '}
+        instead.
+      </p>
+    ),
   },
   {
     id: 10,
-    title: 'Verify Installation',
-    description: 'Confirm agent is running and connected to backend',
-    code: `# Check if service is active
-sudo systemctl is-active monitor-agent
+    title: 'Uninstall',
+    description: 'Remove vs. purge',
+    code: `# Remove the package, keep config + buffered data
+sudo apt remove monitor-agent
 
-# View real-time logs
-journalctl -u monitor-agent -f
+# Remove everything, including config, buffer, and the monitor-agent user
+sudo apt purge monitor-agent`,
+  },
+];
 
-# Press Ctrl+C to exit logs
-
-# Check recent service status
-sudo systemctl status monitor-agent`,
+const troubleshooting = [
+  {
+    title: "Service won't start; log says \"api_key is required\"",
+    body: (
+      <>
+        <code>api_key</code> is unset in <code>agent.yaml</code> (or <code>MONITOR_API_KEY</code>).
+        Set it, then <code>sudo systemctl restart monitor-agent</code>.
+      </>
+    ),
   },
   {
-    id: 11,
-    title: 'Monitor Logs',
-    description: 'View and monitor agent logs for issues',
-    code: `# Stream logs in real-time
-journalctl -u monitor-agent -f
-
-# View last 50 lines
-journalctl -u monitor-agent -n 50
-
-# View logs from last hour
-journalctl -u monitor-agent --since "1 hour ago"
-
-# View logs with timestamps and priorities
-journalctl -u monitor-agent -o short-precise
-
-# Search for errors
-journalctl -u monitor-agent | grep -i error`,
+    title: 'dpkg error about missing nodejs',
+    body: <>Run <code>sudo apt-get -f install</code>, or install Node 18+ first (Step 1).</>,
   },
   {
-    id: 12,
-    title: 'Troubleshooting & Maintenance',
-    description: 'Common commands for troubleshooting and service management',
-    code: `# Restart the service
-sudo systemctl restart monitor-agent
-
-# Stop the service
-sudo systemctl stop monitor-agent
-
-# View service state
-sudo systemctl is-active monitor-agent
-
-# Check if service is enabled
-sudo systemctl is-enabled monitor-agent
-
-# View service configuration
-sudo cat /etc/systemd/system/monitor-agent.service
-
-# Check if process is running
-ps aux | grep "node.*monitor-agent"
-
-# Check CPU and memory usage
-top -b -n 1 | grep monitor-agent`,
+    title: 'Server shows offline, buffer file growing',
+    body: (
+      <>
+        Agent can&apos;t reach <code>server_url</code> — check egress/DNS/firewall and{' '}
+        <code>tls_verify</code>. Buffered data flushes automatically once connectivity returns.
+      </>
+    ),
+  },
+  {
+    title: 'TLS handshake errors',
+    body: (
+      <>
+        Self-signed cert — set <code>tls_verify: false</code> for a lab only, or install a
+        trusted cert.
+      </>
+    ),
+  },
+  {
+    title: 'No security events',
+    body: (
+      <>
+        Confirm <code>security_logs: true</code> and that the unit can read logs (it joins{' '}
+        <code>adm</code>/<code>systemd-journal</code>). Check the <code>auth_log</code> path /{' '}
+        <code>use_journald</code>.
+      </>
+    ),
+  },
+  {
+    title: 'FPM / Lynis / service metrics blank',
+    body: (
+      <>
+        Collector isn&apos;t <code>enabled</code>, or its dependency is missing (<code>lynis</code>,{' '}
+        <code>libfcgi-bin</code>, <code>psql</code>, <code>redis-cli</code>, <code>openssl</code>,{' '}
+        <code>docker</code>).
+      </>
+    ),
+  },
+  {
+    title: 'Edits to config ignored',
+    body: <>Restart after changes: <code>sudo systemctl restart monitor-agent</code>.</>,
   },
 ];
 
@@ -256,7 +282,8 @@ export default function SetupPage() {
       <div className="page-head">
         <h2>Agent Setup Guide</h2>
         <p style={{ margin: '8px 0 0 0', color: 'var(--muted)', fontSize: '13px' }}>
-          Step-by-step installation for Ubuntu servers
+          Packaged (.deb) install for Ubuntu/Debian servers — see <code>agent/INSTALL.md</code> in
+          the repository for the full reference.
         </p>
       </div>
 
@@ -321,7 +348,7 @@ export default function SetupPage() {
           </div>
 
           <div style={{ marginTop: '20px' }}>
-            {currentStep.code ? (
+            {currentStep.code && (
               <div>
                 <div
                   style={{
@@ -359,13 +386,9 @@ export default function SetupPage() {
                     {copied === activeStep ? '✓ Copied' : 'Copy'}
                   </button>
                 </div>
-                <p style={{ fontSize: '12px', color: 'var(--muted)', margin: '12px 0 0 0' }}>
-                  💡 Tip: Click "Copy" to copy all commands above, then paste in your terminal.
-                </p>
               </div>
-            ) : (
-              <div>{currentStep.content}</div>
             )}
+            {currentStep.content && <div>{currentStep.content}</div>}
           </div>
 
           {/* Navigation */}
@@ -458,7 +481,11 @@ export default function SetupPage() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '12px' }}>
           <div style={{ background: 'var(--panel-2)', padding: '12px', borderRadius: '6px', borderLeft: '3px solid var(--ok)' }}>
             <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>Agent Directory</div>
-            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--ok)' }}>/opt/monitor-agent</div>
+            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--ok)' }}>/usr/lib/monitor-agent</div>
+          </div>
+          <div style={{ background: 'var(--panel-2)', padding: '12px', borderRadius: '6px', borderLeft: '3px solid var(--warn)' }}>
+            <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>Config File</div>
+            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--warn)' }}>/etc/monitor-agent/agent.yaml</div>
           </div>
           <div style={{ background: 'var(--panel-2)', padding: '12px', borderRadius: '6px', borderLeft: '3px solid var(--warn)' }}>
             <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>Data Directory</div>
@@ -467,10 +494,6 @@ export default function SetupPage() {
           <div style={{ background: 'var(--panel-2)', padding: '12px', borderRadius: '6px', borderLeft: '3px solid var(--accent)' }}>
             <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>Service Name</div>
             <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--accent)' }}>monitor-agent</div>
-          </div>
-          <div style={{ background: 'var(--panel-2)', padding: '12px', borderRadius: '6px', borderLeft: '3px solid var(--crit)' }}>
-            <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>Service User</div>
-            <div style={{ fontFamily: 'monospace', fontSize: '12px', color: 'var(--crit)' }}>monitor-agent</div>
           </div>
           <div style={{ background: 'var(--panel-2)', padding: '12px', borderRadius: '6px', borderLeft: '3px solid var(--ok)' }}>
             <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>Check Status</div>
@@ -497,45 +520,12 @@ export default function SetupPage() {
           ⚠️ Troubleshooting
         </h3>
         <div style={{ display: 'grid', gap: '12px' }}>
-          <div>
-            <div style={{ fontWeight: '600', marginBottom: '4px' }}>Service won't start</div>
-            <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
-              Check logs: <code style={{ background: 'var(--panel-2)', padding: '2px 6px', borderRadius: '3px' }}>journalctl -u monitor-agent -n 50</code>
-              <br /> Also verify environment variables are set correctly in service file.
+          {troubleshooting.map((t, i) => (
+            <div key={i}>
+              <div style={{ fontWeight: '600', marginBottom: '4px' }}>{t.title}</div>
+              <div style={{ fontSize: '13px', color: 'var(--muted)' }}>{t.body}</div>
             </div>
-          </div>
-          <div>
-            <div style={{ fontWeight: '600', marginBottom: '4px' }}>Can't connect to backend</div>
-            <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
-              Verify MONITOR_SERVER_URL in service file and test: <code style={{ background: 'var(--panel-2)', padding: '2px 6px', borderRadius: '3px' }}>curl http://YOUR_BACKEND_HOST:4000</code>
-              <br /> Check firewall allows outbound connections on port 4000.
-            </div>
-          </div>
-          <div>
-            <div style={{ fontWeight: '600', marginBottom: '4px' }}>Service keeps restarting</div>
-            <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
-              Service is configured to restart on failure. Check logs for errors: <code style={{ background: 'var(--panel-2)', padding: '2px 6px', borderRadius: '3px' }}>journalctl -u monitor-agent -f</code>
-            </div>
-          </div>
-          <div>
-            <div style={{ fontWeight: '600', marginBottom: '4px' }}>High CPU/Memory usage</div>
-            <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
-              Service is limited to 15% CPU and 128MB memory by systemd config. If hitting limits, edit: <code style={{ background: 'var(--panel-2)', padding: '2px 6px', borderRadius: '3px' }}>sudo nano /etc/systemd/system/monitor-agent.service</code>
-            </div>
-          </div>
-          <div>
-            <div style={{ fontWeight: '600', marginBottom: '4px' }}>Permission denied errors</div>
-            <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
-              Verify ownership: <code style={{ background: 'var(--panel-2)', padding: '2px 6px', borderRadius: '3px' }}>sudo chown -R monitor-agent:monitor-agent /opt/monitor-agent /var/lib/monitor-agent</code>
-            </div>
-          </div>
-          <div>
-            <div style={{ fontWeight: '600', marginBottom: '4px' }}>Invalid API key error</div>
-            <div style={{ fontSize: '13px', color: 'var(--muted)' }}>
-              Edit service file and verify MONITOR_API_KEY: <code style={{ background: 'var(--panel-2)', padding: '2px 6px', borderRadius: '3px' }}>sudo nano /etc/systemd/system/monitor-agent.service</code>
-              <br /> Then reload and restart: <code style={{ background: 'var(--panel-2)', padding: '2px 6px', borderRadius: '3px' }}>sudo systemctl daemon-reload && sudo systemctl restart monitor-agent</code>
-            </div>
-          </div>
+          ))}
         </div>
       </div>
     </div>

@@ -20,7 +20,7 @@ export function ChannelBadge({ status }) {
 export default function ReleasesPage() {
   const [releases, setReleases] = useState([]);
   const [err, setErr] = useState('');
-  const [form, setForm] = useState({ version: '', name: '' });
+  const [form, setForm] = useState({ version: '', name: '', planned_date: '' });
 
   const load = () => api.releases().then(setReleases).catch((e) => setErr(e.message));
   useEffect(() => { load(); }, []);
@@ -28,8 +28,8 @@ export default function ReleasesPage() {
   const create = async (e) => {
     e.preventDefault(); setErr('');
     try {
-      await api.createRelease(form);
-      setForm({ version: '', name: '' });
+      await api.createRelease({ ...form, planned_date: form.planned_date || undefined });
+      setForm({ version: '', name: '', planned_date: '' });
       load();
     } catch (e) { setErr(e.message); }
   };
@@ -44,12 +44,14 @@ export default function ReleasesPage() {
           onChange={(e) => setForm({ ...form, version: e.target.value })} />
         <input placeholder="name (optional)" style={{ minWidth: 200 }} value={form.name}
           onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        <input type="date" title="Planned release date (optional)" value={form.planned_date}
+          onChange={(e) => setForm({ ...form, planned_date: e.target.value })} />
         <button type="submit">Draft release</button>
       </form>
 
       <table className="grid" style={{ marginTop: 16 }}>
         <thead>
-          <tr><th>Version</th><th>Name</th><th>Status</th><th>Repos</th><th>Items</th><th>Created</th><th></th></tr>
+          <tr><th>Version</th><th>Name</th><th>Status</th><th>Planned</th><th>Repos</th><th>Items</th><th>Created</th><th></th></tr>
         </thead>
         <tbody>
           {releases.map((r) => (
@@ -57,13 +59,14 @@ export default function ReleasesPage() {
               <td><b>{r.version}</b></td>
               <td>{r.name || <span style={{ color: 'var(--muted)' }}>—</span>}</td>
               <td><ChannelBadge status={r.status} /></td>
+              <td>{r.planned_date ? new Date(r.planned_date).toLocaleDateString() : <span style={{ color: 'var(--muted)' }}>—</span>}</td>
               <td>{r.repo_count}</td>
               <td>{r.item_count}</td>
               <td>{new Date(r.created_at).toLocaleDateString()}</td>
               <td><Link href={`/releases/${r.id}`}><button>Open</button></Link></td>
             </tr>
           ))}
-          {releases.length === 0 && <tr><td colSpan="7" className="empty">No releases yet.</td></tr>}
+          {releases.length === 0 && <tr><td colSpan="8" className="empty">No releases yet.</td></tr>}
         </tbody>
       </table>
       <p className="hint" style={{ marginTop: 16 }}>

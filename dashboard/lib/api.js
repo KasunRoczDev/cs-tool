@@ -289,6 +289,7 @@ export const api = {
   // ── Release status state machine ───────────────────────────────────────
   workflows: () => req('/workflows'),
   releaseBoard: () => req('/release-board'),
+  releaseDashboard: (productId) => req('/release-dashboard' + qs({ product_id: productId })),
   releaseStatus: (id) => req(`/releases/${id}/status`),
   releaseStatusHistory: (id) => req(`/releases/${id}/status-history`),
   transitionRelease: (id, to_status_key, note) => req(`/releases/${id}/transition`, { method: 'POST', body: JSON.stringify({ to_status_key, note }) }),

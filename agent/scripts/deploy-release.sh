@@ -10,11 +10,17 @@
 #    • Non-interactive (used by the monitoring agent):
 #        deploy-release.sh --env <env_path> --repo <repo_slug> \
 #                          [--branch <name>] [--commit <sha>] \
-#                          [--cmd "command"]... [--base-dir DIR] [--log-dir DIR]
+#                          [--cmd "command"]... [--env-var "KEY=VALUE"]... \
+#                          [--base-dir DIR] [--log-dir DIR]
 #
-#  Pipeline steps: fetch → checkout → install → build → migrate → restart →
-#                  health-check → custom-commands. On failure the working tree
-#                  is reset back to the pre-deploy commit (rollback).
+#  Pipeline steps: fetch → checkout → envfile (if any --env-var) → install →
+#                  build → migrate → restart → health-check → custom-commands.
+#                  On failure the working tree is reset back to the pre-deploy
+#                  commit (rollback).
+#
+#  --env-var values are written to .env and exported into this shell for
+#  install/build/migrate/custom steps — NEVER echoed to the log (only the
+#  count is), since deploy_jobs.log is readable via the platform UI.
 #
 #  Step markers (parsed by the agent):  ::step:<name>:<start|ok|fail>::
 # =============================================================================
@@ -27,6 +33,7 @@ REPO_NAME=""
 BRANCH_NAME=""
 COMMIT_SHA=""
 CUSTOM_COMMANDS=()
+ENV_VARS=()
 INTERACTIVE=1
 
 # ---- Parse non-interactive flags --------------------------------------------
@@ -37,6 +44,7 @@ while [[ $# -gt 0 ]]; do
     --branch)   BRANCH_NAME="$2"; shift 2 ;;
     --commit)   COMMIT_SHA="$2"; shift 2 ;;
     --cmd)      CUSTOM_COMMANDS+=("$2"); shift 2 ;;
+    --env-var)  ENV_VARS+=("$2"); shift 2 ;;
     --base-dir) BASE_DIR="$2"; shift 2 ;;
     --log-dir)  LOG_DIR="$2"; shift 2 ;;
     *) echo "Unknown arg: $1"; exit 2 ;;
@@ -132,7 +140,30 @@ else
   run checkout git pull --ff-only || { rollback; exit 1; }
 fi
 
-# 3) install deps (auto-detect stack)
+# 3) env vars/secrets -> .env (values never logged, only the count) + exported
+#    into this shell so install/build/migrate/custom steps can see them too.
+if [[ ${#ENV_VARS[@]} -gt 0 ]]; then
+  step envfile start
+  if [[ -f "$APP_PATH/.env" ]]; then
+    TMP_ENV="$(mktemp)"
+    cp "$APP_PATH/.env" "$TMP_ENV"
+    for KV in "${ENV_VARS[@]}"; do
+      K="${KV%%=*}"
+      grep -v "^${K}=" "$TMP_ENV" > "${TMP_ENV}.new" 2>/dev/null && mv "${TMP_ENV}.new" "$TMP_ENV"
+    done
+    mv "$TMP_ENV" "$APP_PATH/.env"
+  else
+    : > "$APP_PATH/.env"
+  fi
+  for KV in "${ENV_VARS[@]}"; do
+    echo "$KV" >> "$APP_PATH/.env"
+    export "${KV%%=*}=${KV#*=}"
+  done
+  log "Wrote ${#ENV_VARS[@]} env var(s) to .env"
+  step envfile ok
+fi
+
+# 4) install deps (auto-detect stack)
 step install start
 INSTALL_OK=1
 if [[ -f composer.json ]]; then
@@ -143,21 +174,21 @@ if [[ -f package.json ]]; then
 fi
 [[ "$INSTALL_OK" -eq 1 ]] && step install ok || { step install fail; rollback; exit 1; }
 
-# 4) build (front-end / asset build if present)
+# 5) build (front-end / asset build if present)
 step build start
 if [[ -f package.json ]] && grep -q '"build"' package.json; then
   npm run build >>"$LOG_FILE" 2>&1 || { step build fail; rollback; exit 1; }
 fi
 step build ok
 
-# 5) migrate (Laravel artisan if present)
+# 6) migrate (Laravel artisan if present)
 step migrate start
 if [[ -f artisan ]]; then
   php artisan migrate --force >>"$LOG_FILE" 2>&1 || { step migrate fail; rollback; exit 1; }
 fi
 step migrate ok
 
-# 6) restart services (php-fpm reload, queue restart, pm2 if used)
+# 7) restart services (php-fpm reload, queue restart, pm2 if used)
 step restart start
 {
   [[ -f artisan ]] && php artisan config:cache >>"$LOG_FILE" 2>&1
@@ -167,7 +198,7 @@ step restart start
 } || true
 step restart ok
 
-# 7) health check (optional HEALTHCHECK_URL env)
+# 8) health check (optional HEALTHCHECK_URL env)
 step health start
 if [[ -n "${HEALTHCHECK_URL:-}" ]]; then
   if curl -fsS --max-time 15 "$HEALTHCHECK_URL" >>"$LOG_FILE" 2>&1; then
@@ -180,7 +211,7 @@ else
   step health ok
 fi
 
-# 8) custom commands
+# 9) custom commands
 if [[ ${#CUSTOM_COMMANDS[@]} -gt 0 ]]; then
   step custom start
   CUSTOM_OK=1

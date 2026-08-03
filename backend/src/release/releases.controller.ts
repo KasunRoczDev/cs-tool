@@ -9,16 +9,19 @@ import {
   Req,
   UseGuards,
 } from '@nestjs/common';
-import { IsIn, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsIn, IsOptional, IsString } from 'class-validator';
 import { JwtAuthGuard, Roles } from '../common/jwt-auth.guard';
 import { ReleasesService } from './releases.service';
 
 class CreateReleaseDto {
   @IsString() version!: string;
   @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsDateString() planned_date?: string;
 }
 class UpdateReleaseDto {
   @IsOptional() @IsString() name?: string;
+  // '' clears the planned date; a non-empty value is date-format-checked in the service.
+  @IsOptional() @IsString() planned_date?: string;
 }
 class AddRepoDto {
   @IsString() repository_id!: string;
@@ -106,5 +109,10 @@ export class ReleasesController {
   @Get(':id/release-notes')
   getNotes(@Param('id') id: string) {
     return this.releases.getNotes(id);
+  }
+
+  @Get(':id/test-status')
+  testStatus(@Param('id') id: string) {
+    return this.releases.testStatus(id);
   }
 }

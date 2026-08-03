@@ -26,7 +26,7 @@ export class DiscordConfig {
 }
 
 export class WebhookConfig {
-  @IsString() webhook_url!: string;  // Slack / Microsoft Teams incoming webhook URL
+  @IsString() webhook_url!: string;  // Slack / Microsoft Teams / generic webhook URL
 }
 
 /** Platform events a channel can subscribe to (stored in channel config.events). */
@@ -39,13 +39,14 @@ export const PLATFORM_EVENTS = [
   'release.approval_submitted',
   'release.fully_approved',
   'hotfix.created',
+  'release.ai_high_risk',
 ] as const;
 
 export class CreateChannelDto {
   @IsString() name!: string;
-  /** Supported channel types. */
-  @IsIn(['email', 'discord', 'slack', 'teams']) type!: string;
-  // config: email {to,cc,subject_prefix} · discord/slack/teams {webhook_url,...}
+  /** Supported channel types. 'webhook' = generic outbound POST, no provider-specific formatting. */
+  @IsIn(['email', 'discord', 'slack', 'teams', 'webhook']) type!: string;
+  // config: email {to,cc,subject_prefix} · discord/slack/teams/webhook {webhook_url,...}
   // optional config.events: string[] — platform events this channel receives.
   @IsObject() config!: Record<string, any>;
   @IsOptional() @IsBoolean() enabled?: boolean;

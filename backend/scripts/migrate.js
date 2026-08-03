@@ -132,6 +132,71 @@ const bcrypt = require('bcryptjs');
     await client.query(fs.readFileSync(rbacPath, 'utf8'));
   }
 
+  // Apply release-workflow-config migration (idempotent — widens releases.status
+  // to TEXT so custom per-product workflow status keys don't hit the old
+  // release_channel enum). Must run after rbac_migration.sql.
+  const workflowConfigPath =
+    process.env.RELEASE_WORKFLOW_CONFIG_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/release_workflow_config_migration.sql');
+  if (fs.existsSync(workflowConfigPath)) {
+    console.log('Applying release-workflow-config migration...');
+    await client.query(fs.readFileSync(workflowConfigPath, 'utf8'));
+  }
+
+  // Apply release-calendar migration (idempotent — planned_date, scheduled
+  // deployments, freeze windows). Must run after deploy_jobs_migration.sql and
+  // deploy_cancel_migration.sql (deployments, channels, deploy_status enum,
+  // uq_deployments_active_channel — all widened/reused here).
+  const calendarPath =
+    process.env.RELEASE_CALENDAR_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/release_calendar_migration.sql');
+  if (fs.existsSync(calendarPath)) {
+    console.log('Applying release-calendar migration...');
+    await client.query(fs.readFileSync(calendarPath, 'utf8'));
+  }
+
+  // Apply deployment-strategy migration (idempotent — rolling/canary batch
+  // waves on top of deploy_jobs). Must run after deploy_jobs_migration.sql
+  // and deploy_cancel_migration.sql.
+  const strategyPath =
+    process.env.DEPLOYMENT_STRATEGY_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/deployment_strategy_migration.sql');
+  if (fs.existsSync(strategyPath)) {
+    console.log('Applying deployment-strategy migration...');
+    await client.query(fs.readFileSync(strategyPath, 'utf8'));
+  }
+
+  // Apply environment-secrets migration (idempotent — channel env vars/secrets,
+  // channel locking, deploy_jobs.env_vars). Must run after deploy_jobs_migration.sql.
+  const envSecretsPath =
+    process.env.ENVIRONMENT_SECRETS_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/environment_secrets_migration.sql');
+  if (fs.existsSync(envSecretsPath)) {
+    console.log('Applying environment-secrets migration...');
+    await client.query(fs.readFileSync(envSecretsPath, 'utf8'));
+  }
+
+  // Apply approval-workflows migration (idempotent — delegation, expiration,
+  // reminders, decision history). Must run after release_approvals_migration.sql.
+  const approvalWorkflowsPath =
+    process.env.APPROVAL_WORKFLOWS_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/approval_workflows_migration.sql');
+  if (fs.existsSync(approvalWorkflowsPath)) {
+    console.log('Applying approval-workflows migration...');
+    await client.query(fs.readFileSync(approvalWorkflowsPath, 'utf8'));
+  }
+
+  // Apply recurring-deployment migration (idempotent — redeploy a fixed
+  // release to a channel on a schedule). Must run after
+  // deployment_strategy_migration.sql.
+  const recurringPath =
+    process.env.RECURRING_DEPLOYMENT_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/recurring_deployment_migration.sql');
+  if (fs.existsSync(recurringPath)) {
+    console.log('Applying recurring-deployment migration...');
+    await client.query(fs.readFileSync(recurringPath, 'utf8'));
+  }
+
   // Apply trusted-devices migration (idempotent — IF NOT EXISTS).
   const trustedDevicesPath =
     process.env.TRUSTED_DEVICES_MIGRATION_PATH ||

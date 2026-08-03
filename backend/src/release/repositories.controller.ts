@@ -14,6 +14,7 @@ import {
   IsOptional,
   IsString,
   IsBoolean,
+  Matches,
 } from 'class-validator';
 import { JwtAuthGuard, Roles } from '../common/jwt-auth.guard';
 import { RepositoriesService } from './repositories.service';
@@ -46,8 +47,15 @@ class UpdateRepoDto {
   @IsOptional() @IsString() github_token?: string;
 }
 
-class CreateVersionDto {
-  @IsString() version!: string;
+export class CreateVersionDto {
+  // Rejects unparseable input up front instead of letting createVersion's
+  // parser silently coerce it to major=minor=patch=0, which corrupted the
+  // version list's numeric sort order for anything that wasn't valid semver.
+  @IsString()
+  @Matches(/^v?\d+\.\d+(\.\d+)?(-[0-9A-Za-z.-]+)?$/, {
+    message: 'version must look like 1.2.3, 1.2, or 1.2.3-rc.1 (an optional leading "v" is fine)',
+  })
+  version!: string;
   @IsOptional() @IsString() commit_sha?: string;
   @IsOptional() @IsString() prerelease?: string;
 }

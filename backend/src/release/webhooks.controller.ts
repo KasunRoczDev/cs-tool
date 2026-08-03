@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, HttpCode, Post } from '@nestjs/common';
+import { Body, Controller, Headers, HttpCode, Post, Req } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { NotificationsService } from '../notifications/notifications.service';
 
@@ -22,12 +22,20 @@ export class WebhooksController {
   async github(
     @Headers() headers: Record<string, string>,
     @Body() body: any,
+    @Req() req: any,
   ): Promise<{ accepted: boolean; event?: string; reason?: string }> {
     const secret = process.env.GITHUB_WEBHOOK_SECRET;
     if (secret) {
+      // Verify against the exact bytes GitHub signed (main.ts stashes them as
+      // req.rawBody), not JSON.stringify(body) — re-serializing the parsed
+      // object isn't guaranteed to byte-match the original payload, which would
+      // silently reject legitimately-signed webhooks. Fail closed if the raw
+      // body wasn't captured for some reason, rather than falling back to the
+      // broken comparison.
+      const raw: Buffer | undefined = req.rawBody;
       const sig = headers['x-hub-signature-256'];
-      const expected =
-        'sha256=' + createHmac('sha256', secret).update(JSON.stringify(body)).digest('hex');
+      if (!raw) return { accepted: false, reason: 'invalid_signature' };
+      const expected = 'sha256=' + createHmac('sha256', secret).update(raw).digest('hex');
       const ok =
         !!sig &&
         sig.length === expected.length &&

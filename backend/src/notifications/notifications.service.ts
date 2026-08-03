@@ -5,6 +5,7 @@ import { EmailService, AlertEmailContext } from './email.service';
 import { DiscordService, AlertDiscordContext } from './discord.service';
 import { SlackService, EventMessage } from './slack.service';
 import { TeamsService } from './teams.service';
+import { WebhookService } from './webhook.service';
 import { CreateChannelDto, UpdateChannelDto, CreateRuleDto, UpdateRuleDto } from './dto';
 
 export interface AlertPayload {
@@ -30,6 +31,7 @@ export class NotificationsService {
     private readonly discord: DiscordService,
     private readonly slack: SlackService,
     private readonly teams: TeamsService,
+    private readonly webhook: WebhookService,
   ) {}
 
   // ── Channels ─────────────────────────────────────────────────────────────
@@ -165,6 +167,12 @@ export class NotificationsService {
       await this.teams.sendTest(webhookUrl);
       return { sent: true, to: 'teams' };
     }
+    if (ch.type === 'webhook') {
+      const webhookUrl = ch.config?.webhook_url;
+      if (!webhookUrl) throw new Error('Channel has no webhook_url configured');
+      await this.webhook.sendTest(webhookUrl);
+      return { sent: true, to: 'webhook' };
+    }
 
     const to = ch.config?.to;
     if (!to) throw new Error('Channel has no "to" email configured');
@@ -207,6 +215,9 @@ export class NotificationsService {
         } else if (ch.type === 'teams') {
           if (!cfg.webhook_url) continue;
           await this.teams.sendEvent(cfg.webhook_url, msg);
+        } else if (ch.type === 'webhook') {
+          if (!cfg.webhook_url) continue;
+          await this.webhook.sendEvent(cfg.webhook_url, { ...msg, event: eventType });
         } else continue;
         notified++;
         await this.logEvent(ch.id, eventType, 'sent', null);
