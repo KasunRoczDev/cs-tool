@@ -17,6 +17,14 @@ import { ApprovalsController } from './approvals.controller';
 import { AccessModule } from '../access/access.module';
 import { StatusService } from './status/status.service';
 import { StatusController } from './status/status.controller';
+import { CalendarService } from './calendar.service';
+import { CalendarController } from './calendar.controller';
+import { EnvironmentService } from './environment.service';
+import { EnvironmentController } from './environment.controller';
+import { AuditService } from './audit.service';
+import { AuditController } from './audit.controller';
+import { AgentReleasesService } from './agent-releases.service';
+import { AgentReleasesController } from './agent-releases.controller';
 
 /**
  * Release Management — repositories, versions, releases (draft builder, repo
@@ -39,6 +47,10 @@ import { StatusController } from './status/status.controller';
     DeploymentsService,
     ApprovalsService,
     StatusService,
+    CalendarService,
+    EnvironmentService,
+    AuditService,
+    AgentReleasesService,
   ],
   controllers: [
     RepositoriesController,
@@ -48,6 +60,10 @@ import { StatusController } from './status/status.controller';
     WebhooksController,
     ApprovalsController,
     StatusController,
+    CalendarController,
+    EnvironmentController,
+    AuditController,
+    AgentReleasesController,
   ],
   exports: [RepositoriesService, ReleasesService, DeploymentsService, GitService, ApprovalsService],
 })
