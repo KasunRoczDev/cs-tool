@@ -7,11 +7,12 @@ each screen does and every option on it.
 
 ## Overview
 
-Release Management adds eight pages under the **Release Management** sidebar
+Release Management adds nine pages under the **Release Management** sidebar
 section, plus two admin-only configuration/oversight pages:
 
 | Page | Path | Purpose |
 |---|---|---|
+| 🏠 Release Dashboard | `/release-dashboard` | At-a-glance overview: active releases, pending approvals, upcoming releases, production versions, pipeline health |
 | 📚 Repositories | `/repositories` | Register repos, manage branches/versions, GitHub tokens |
 | 🚀 Releases | `/releases`, `/releases/:id` | Build a release: pin repos, bundle changes, approvals, status, deploy |
 | 🗂️ Release Board | `/release-board` | Kanban view of every release by status |
@@ -26,6 +27,28 @@ section, plus two admin-only configuration/oversight pages:
 Mutating actions generally require the `admin` or `operator` role at minimum;
 the fine-grained RBAC layer (product-wise roles/permissions) sits on top of
 that — see [Roles & permissions](#roles--permissions) below.
+
+---
+
+## 🏠 Release Dashboard
+
+A single-page overview, filterable by product:
+
+- **Active Releases** — releases whose current status is mid-workflow (not
+  draft, not archived/terminal).
+- **Pending Approvals** — every still-undecided sign-off across active
+  releases, platform-wide (not scoped to the signed-in user).
+- **Upcoming Releases** — releases with a `planned_date` in the next 14 days.
+- **Current Production Version** — the latest succeeded deployment per
+  product on the `production` channel.
+- **Pipeline Health** — deploy-job succeeded/failed rate over the trailing
+  7 days.
+- **Next 14 Days** — a 5-item strip combining planned releases, scheduled/
+  recent deployments, and freeze windows (not product-filtered — links to
+  the full [Release Calendar](#-release-calendar) for the complete view).
+
+Manual refresh (a **↻ Refresh** button), same as Release Metrics — no
+WebSocket wiring.
 
 ---
 

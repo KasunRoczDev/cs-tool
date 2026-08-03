@@ -315,10 +315,13 @@ recommendations, breaking-change detection, incident correlation.
   to compute most of these from.
 
 ## 23. Dashboard
-❌ Missing — the platform's `/` overview is general server monitoring, not
-release-specific. No widget for active releases, pending approvals, failed
-deployments, upcoming releases, current production version, recent
-rollbacks, pipeline health, or a deployment calendar.
+- ✅ **Done** — the **Release Dashboard** page (`/release-dashboard`,
+  `GET /release-dashboard`) shows active releases, pending approvals,
+  upcoming releases (14-day window), current production version per
+  product, deploy-job pipeline health (7-day window), and a mini calendar
+  strip. Manual refresh, same as Release Metrics. The mini-calendar widget
+  is not product-filtered (`CalendarService.calendar()` has no
+  product-scoping parameter today).
 
 ## 24. Search & Filtering
 ❌ Missing — no global search, advanced/saved filters, or search-by-PR /
@@ -414,11 +417,12 @@ Re-ordered against what's actually already there:
     of a fixed release, managed from the release detail page, fully gated
     by the same approval/freeze/lock checks as a manual deploy.
 
-**All ten priority items from this list are now done.** Notably *not*
-re-prioritized up: **Artifact Management** (Docker/Helm/package registries)
-— not assessed above because it wasn't in the per-category list; worth a
-follow-up pass if it matters to you. Beyond that, the remaining ❌/⚠️ items
-throughout this document are the ones deliberately left for a future pass,
-each with a stated reason (needs infrastructure this platform doesn't have,
-needs a product decision only you can make, or is genuinely low value for
-its complexity) rather than silently dropped.
+**All ten priority items from this list are now done, plus the Release
+Dashboard (§23).** Notably *not* re-prioritized up: **Artifact Management**
+(Docker/Helm/package registries) — not assessed above because it wasn't in
+the per-category list; worth a follow-up pass if it matters to you. Beyond
+that, the remaining ❌/⚠️ items throughout this document are the ones
+deliberately left for a future pass, each with a stated reason (needs
+infrastructure this platform doesn't have, needs a product decision only
+you can make, or is genuinely low value for its complexity) rather than
+silently dropped.
