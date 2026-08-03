@@ -23,6 +23,8 @@ import { EnvironmentService } from './environment.service';
 import { EnvironmentController } from './environment.controller';
 import { AuditService } from './audit.service';
 import { AuditController } from './audit.controller';
+import { DashboardService } from './dashboard.service';
+import { DashboardController } from './dashboard.controller';
 import { AgentReleasesService } from './agent-releases.service';
 import { AgentReleasesController } from './agent-releases.controller';
 import { AgentUpdatesController } from './agent-updates.controller';
@@ -51,6 +53,7 @@ import { AgentUpdatesController } from './agent-updates.controller';
     CalendarService,
     EnvironmentService,
     AuditService,
+    DashboardService,
     AgentReleasesService,
   ],
   controllers: [
@@ -64,6 +67,7 @@ import { AgentUpdatesController } from './agent-updates.controller';
     CalendarController,
     EnvironmentController,
     AuditController,
+    DashboardController,
     AgentReleasesController,
     AgentUpdatesController,
   ],
