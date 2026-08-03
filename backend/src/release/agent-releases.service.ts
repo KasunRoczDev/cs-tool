@@ -104,4 +104,66 @@ export class AgentReleasesService {
     if (!rows[0]) throw new NotFoundException('Agent release not found');
     return rows[0];
   }
+
+  /** Deterministic 0-99 bucket for a server id — the same server always lands in the same bucket, so raising rollout_percent only ever adds servers, never reshuffles who's already in. */
+  static bucketFor(serverId: string): number {
+    const hash = createHash('sha256').update(serverId).digest();
+    return hash.readUInt32BE(0) % 100;
+  }
+
+  /**
+   * Resolve what (if anything) a given server should update to, honoring the
+   * per-server exclusion flag, the global kill switch (platform_settings),
+   * and the active release's rollout percent.
+   */
+  async latestFor(
+    serverId: string,
+  ): Promise<{ eligible: false } | { eligible: true; version: string; sha256: string; signature: string }> {
+    const { rows: srows } = await this.pool.query(
+      `SELECT agent_auto_update_excluded FROM servers WHERE id = $1`,
+      [serverId],
+    );
+    if (!srows[0] || srows[0].agent_auto_update_excluded) return { eligible: false };
+
+    const { rows: setting } = await this.pool.query(
+      `SELECT value FROM platform_settings WHERE key = 'agent_auto_update_enabled'`,
+    );
+    if (setting[0]?.value !== 'true') return { eligible: false };
+
+    const { rows } = await this.pool.query(
+      `SELECT version, sha256, signature, rollout_percent
+         FROM agent_releases WHERE is_active = true ORDER BY created_at DESC LIMIT 1`,
+    );
+    const release = rows[0];
+    if (!release) return { eligible: false };
+
+    const bucket = AgentReleasesService.bucketFor(serverId);
+    if (bucket >= release.rollout_percent) return { eligible: false };
+
+    return { eligible: true, version: release.version, sha256: release.sha256, signature: release.signature };
+  }
+
+  /** Raw .deb bytes for an active version — streamed back to the requesting agent. */
+  async getPackage(version: string): Promise<Buffer> {
+    const { rows } = await this.pool.query(
+      `SELECT package FROM agent_releases WHERE version = $1 AND is_active = true`,
+      [version],
+    );
+    if (!rows[0]) throw new NotFoundException('Agent release not found');
+    return rows[0].package;
+  }
+
+  /** Records what an agent reports about applying an update (called after apply-update.sh runs, whichever version ends up running). */
+  async reportUpdate(
+    serverId: string,
+    body: { version: string; status: string; message?: string },
+  ): Promise<{ ok: true }> {
+    await this.pool.query(
+      `UPDATE servers
+          SET agent_version = $2, agent_update_status = $3, agent_update_message = $4, agent_last_update_at = now()
+        WHERE id = $1`,
+      [serverId, body.version, body.status, body.message ?? null],
+    );
+    return { ok: true };
+  }
 }
