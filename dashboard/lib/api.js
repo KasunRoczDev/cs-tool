@@ -161,13 +161,22 @@ export const api = {
   archiveRelease: (id) => req(`/releases/${id}/archive`, { method: 'POST' }),
   generateReleaseNotes: (id) => req(`/releases/${id}/release-notes/generate`, { method: 'POST' }),
   releaseNotes: (id) => req(`/releases/${id}/release-notes`),
+  releaseTestStatus: (id) => req(`/releases/${id}/test-status`),
   // Deployments
   channels: () => req('/channels'),
   deployments: () => req('/deployments'),
   deploymentBoard: () => req('/deployments/board'),
+  deploymentMetrics: (channel, days) => req(`/deployments/metrics${qs({ channel, days })}`),
   deploymentHistory: (id) => req(`/deployments/${id}/history`),
   deploymentJobs: (id) => req(`/deployments/${id}/jobs`),
   deployJobLog: (jobId) => req(`/deploy-jobs/${jobId}/log`),
+  // Environment variables/secrets & channel locking
+  channelEnvVars: (channelId) => req(`/channels/${channelId}/env-vars`),
+  upsertEnvVar: (channelId, body) => req(`/channels/${channelId}/env-vars`, { method: 'POST', body: JSON.stringify(body) }),
+  deleteEnvVar: (channelId, varId) => req(`/channels/${channelId}/env-vars/${varId}`, { method: 'DELETE' }),
+  compareChannelEnv: (a, b) => req(`/channels/compare-env${qs({ a, b })}`),
+  lockChannel: (channelId, reason) => req(`/channels/${channelId}/lock`, { method: 'POST', body: JSON.stringify({ reason }) }),
+  unlockChannel: (channelId) => req(`/channels/${channelId}/unlock`, { method: 'POST' }),
   // body: { channel, server_ids?, branch?, custom_commands? } (string allowed for back-compat)
   deployRelease: (id, body) => req(`/releases/${id}/deployments`, {
     method: 'POST',
@@ -176,7 +185,42 @@ export const api = {
   approveDeployment: (id) => req(`/deployments/${id}/approve`, { method: 'POST' }),
   rollbackDeployment: (id) => req(`/deployments/${id}/rollback`, { method: 'POST' }),
   cancelDeployment: (id) => req(`/deployments/${id}/cancel`, { method: 'POST' }),
+  // Release calendar & scheduling
+  releaseCalendar: (from, to) => req(`/release-calendar${qs({ from, to })}`),
+  freezeWindows: () => req('/freeze-windows'),
+  createFreezeWindow: (body) => req('/freeze-windows', { method: 'POST', body: JSON.stringify(body) }),
+  deleteFreezeWindow: (id) => req(`/freeze-windows/${id}`, { method: 'DELETE' }),
   retryDeployment: (id) => req(`/deployments/${id}/retry`, { method: 'POST' }),
+  promoteWave: (id) => req(`/deployments/${id}/promote-wave`, { method: 'POST' }),
+  // ── Agent self-update ───────────────────────────────────────────────────
+  agentReleases: () => req('/agent-releases'),
+  updateAgentRelease: (id, body) => req(`/agent-releases/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  // Multipart publish (package file + version/changelog/signature/rollout_percent) — must NOT force JSON content-type.
+  publishAgentRelease: async (formData) => {
+    const token = getToken();
+    const res = await fetch(`${BASE}/api/v1/agent-releases`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: formData,
+    });
+    if (res.status === 401) {
+      setToken(null);
+      if (typeof window !== 'undefined') window.location.href = '/login';
+      throw new Error('Unauthorized');
+    }
+    if (!res.ok) {
+      let msg = `HTTP ${res.status}`;
+      try { const j = await res.json(); if (j.message) msg = Array.isArray(j.message) ? j.message.join(', ') : j.message; } catch {}
+      throw new Error(msg);
+    }
+    return res.json();
+  },
+  // Recurring deployments
+  recurringDeployments: (releaseId) => req(`/recurring-deployments${qs({ release_id: releaseId })}`),
+  createRecurringDeployment: (body) => req('/recurring-deployments', { method: 'POST', body: JSON.stringify(body) }),
+  enableRecurringDeployment: (id) => req(`/recurring-deployments/${id}/enable`, { method: 'POST' }),
+  disableRecurringDeployment: (id) => req(`/recurring-deployments/${id}/disable`, { method: 'POST' }),
+  deleteRecurringDeployment: (id) => req(`/recurring-deployments/${id}`, { method: 'DELETE' }),
   // ── AI Assistant ───────────────────────────────────────────────────────
   aiStatus: () => req('/ai/status'),
   aiRisk: (id, channel) => req(`/ai/releases/${id}/risk${qs({ channel })}`),
@@ -211,6 +255,26 @@ export const api = {
     }
     return res.json();
   },
+  releaseApprovalHistory: (id) => req(`/releases/${id}/approvals/history`),
+  reRequestApproval: (id, approverId) => req(`/releases/${id}/approvals/${approverId}/re-request`, { method: 'POST' }),
+  approvalDelegations: (userId) => req(`/approval-delegations${qs({ user_id: userId })}`),
+  createApprovalDelegation: (body) => req('/approval-delegations', { method: 'POST', body: JSON.stringify(body) }),
+  revokeApprovalDelegation: (id) => req(`/approval-delegations/${id}`, { method: 'DELETE' }),
+  // ── Audit log ───────────────────────────────────────────────────────────
+  auditLog: (filters) => req(`/audit-log${qs(filters)}`),
+  exportAuditLogCsv: async (filters) => {
+    const token = getToken();
+    const res = await fetch(`${BASE}/api/v1/audit-log/export.csv${qs(filters)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'release-audit-log.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  },
   // ── Access control (RBAC) ──────────────────────────────────────────────
   myPermissions: (product) => req(`/me/permissions${qs({ product })}`),
   permissions: () => req('/permissions'),
@@ -228,6 +292,16 @@ export const api = {
   releaseStatus: (id) => req(`/releases/${id}/status`),
   releaseStatusHistory: (id) => req(`/releases/${id}/status-history`),
   transitionRelease: (id, to_status_key, note) => req(`/releases/${id}/transition`, { method: 'POST', body: JSON.stringify({ to_status_key, note }) }),
+  // ── Release workflow configuration ─────────────────────────────────────
+  workflowDetail: (id) => req(`/workflows/${id}`),
+  createWorkflow: (body) => req('/workflows', { method: 'POST', body: JSON.stringify(body) }),
+  updateWorkflow: (id, body) => req(`/workflows/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteWorkflow: (id) => req(`/workflows/${id}`, { method: 'DELETE' }),
+  createWorkflowStatus: (id, body) => req(`/workflows/${id}/statuses`, { method: 'POST', body: JSON.stringify(body) }),
+  updateWorkflowStatus: (id, statusId, body) => req(`/workflows/${id}/statuses/${statusId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteWorkflowStatus: (id, statusId) => req(`/workflows/${id}/statuses/${statusId}`, { method: 'DELETE' }),
+  createWorkflowTransition: (id, body) => req(`/workflows/${id}/transitions`, { method: 'POST', body: JSON.stringify(body) }),
+  deleteWorkflowTransition: (id, transitionId) => req(`/workflows/${id}/transitions/${transitionId}`, { method: 'DELETE' }),
   // Authenticated attachment download → triggers a browser save.
   downloadApprovalAttachment: async (attId, filename) => {
     const token = getToken();
