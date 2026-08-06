@@ -352,4 +352,18 @@ export const api = {
     req('/billing/dashboard/summary' + qs({ months, period, month, product_id: productId })),
   billingReport: (month, filters) => req('/billing/report' + qs({ month, ...filters })),
   billingInsights: () => req('/billing/dashboard/insights'),
+  // ── Apps directory ──────────────────────────────────────────────────
+  apps: () => req('/apps'),
+  app: (id) => req(`/apps/${id}`),
+  createApp: (body) => req('/apps', { method: 'POST', body: JSON.stringify(body) }),
+  updateApp: (id, body) => req(`/apps/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteApp: (id) => req(`/apps/${id}`, { method: 'DELETE' }),
+  appServers: (appId) => req(`/apps/${appId}/servers`),
+  serverApps: (serverId) => req(`/servers/${serverId}/apps`),
+  linkServerApp: (serverId, body) => req(`/servers/${serverId}/apps`, { method: 'POST', body: JSON.stringify(body) }),
+  updateServerApp: (serverId, appId, body) => req(`/servers/${serverId}/apps/${appId}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  unlinkServerApp: (serverId, appId) => req(`/servers/${serverId}/apps/${appId}`, { method: 'DELETE' }),
+  appEnvVars: (appId, channelId) => req(`/apps/${appId}/env-vars` + (channelId ? `?channel_id=${channelId}` : '')),
+  upsertAppEnvVar: (appId, body) => req(`/apps/${appId}/env-vars`, { method: 'POST', body: JSON.stringify(body) }),
+  deleteAppEnvVar: (appId, varId) => req(`/apps/${appId}/env-vars/${varId}`, { method: 'DELETE' }),
 };
