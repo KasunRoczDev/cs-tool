@@ -317,4 +317,35 @@ export const api = {
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
   },
+  // ── Billing ──────────────────────────────────────────────────────────
+  serviceTypes: () => req('/billing/service-types'),
+  createServiceType: (body) => req('/billing/service-types', { method: 'POST', body: JSON.stringify(body) }),
+  updateServiceType: (id, body) => req(`/billing/service-types/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteServiceType: (id) => req(`/billing/service-types/${id}`, { method: 'DELETE' }),
+  billingServices: (filters) => req('/billing/services' + qs(filters)),
+  billingService: (id) => req(`/billing/services/${id}`),
+  createBillingService: (body) => req('/billing/services', { method: 'POST', body: JSON.stringify(body) }),
+  updateBillingService: (id, body) => req(`/billing/services/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  retireBillingService: (id) => req(`/billing/services/${id}/retire`, { method: 'POST' }),
+  reactivateBillingService: (id) => req(`/billing/services/${id}/reactivate`, { method: 'POST' }),
+  monthlyBillingForm: (productId, month) => req(`/billing/monthly-form${qs({ product_id: productId, month })}`),
+  bulkBillingRecords: (body) => req('/billing/records/bulk', { method: 'POST', body: JSON.stringify(body) }),
+  billingRecords: (filters) => req('/billing/records' + qs(filters)),
+  updateBillingRecord: (id, body) => req(`/billing/records/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteBillingRecord: (id) => req(`/billing/records/${id}`, { method: 'DELETE' }),
+  exportBillingRecordsCsv: async (filters) => {
+    const token = getToken();
+    const res = await fetch(`${BASE}/api/v1/billing/records/export.csv${qs(filters)}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new Error(`Export failed (HTTP ${res.status})`);
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'billing-history.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  },
+  billingDashboardSummary: (months) => req('/billing/dashboard/summary' + qs({ months })),
+  billingInsights: () => req('/billing/dashboard/insights'),
 };
