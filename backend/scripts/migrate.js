@@ -246,6 +246,17 @@ const bcrypt = require('bcryptjs');
     await client.query(fs.readFileSync(agentUpdateStatusPath, 'utf8'));
   }
 
+  // Apply billing-management migration (idempotent — IF NOT EXISTS / guarded
+  // enums). Must run after products_migration.sql (products) and
+  // settings_migration.sql (platform_settings).
+  const billingPath =
+    process.env.BILLING_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/billing_migration.sql');
+  if (fs.existsSync(billingPath)) {
+    console.log('Applying billing-management migration...');
+    await client.query(fs.readFileSync(billingPath, 'utf8'));
+  }
+
   const email = process.env.ADMIN_EMAIL || 'admin@example.com';
   const password = process.env.ADMIN_PASSWORD || 'admin123';
   const hash = await bcrypt.hash(password, 10);
