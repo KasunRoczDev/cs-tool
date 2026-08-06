@@ -13,6 +13,7 @@ export interface ServiceRow {
   service_type_name: string;
   name: string;
   region: string | null;
+  provider: string | null;
   specs: { key: string; value: string }[];
   billing_mode: BillingMode;
   server_id: string | null;
@@ -27,6 +28,7 @@ export interface ServiceInput {
   service_type_id: string;
   name: string;
   region?: string;
+  provider?: string;
   specs?: { key: string; value: string }[];
   billing_mode?: BillingMode;
   server_id?: string;
@@ -36,7 +38,7 @@ export interface ServiceInput {
 const LIST_SELECT = `
   SELECT s.id, s.product_id, p.name AS product_name,
          s.service_type_id, st.name AS service_type_name,
-         s.name, s.region, s.specs, s.billing_mode,
+         s.name, s.region, s.provider, s.specs, s.billing_mode,
          s.server_id, sv.name AS server_name,
          s.tags, s.status, s.created_at
     FROM services s
@@ -49,13 +51,14 @@ export class ServicesService {
   constructor(@Inject(PG_POOL) private readonly pool: Pool) {}
 
   async list(filters: {
-    product_id?: string; service_type_id?: string; status?: string;
+    product_id?: string; service_type_id?: string; status?: string; provider?: string;
   }): Promise<ServiceRow[]> {
     const where: string[] = [];
     const params: any[] = [];
     if (filters.product_id) { params.push(filters.product_id); where.push(`s.product_id = $${params.length}`); }
     if (filters.service_type_id) { params.push(filters.service_type_id); where.push(`s.service_type_id = $${params.length}`); }
     if (filters.status) { params.push(filters.status); where.push(`s.status = $${params.length}`); }
+    if (filters.provider) { params.push(filters.provider); where.push(`s.provider = $${params.length}`); }
     const sql = `${LIST_SELECT} ${where.length ? `WHERE ${where.join(' AND ')}` : ''} ORDER BY p.name, s.name`;
     const { rows } = await this.pool.query(sql, params);
     return rows;
@@ -69,14 +72,15 @@ export class ServicesService {
 
   async create(input: ServiceInput, userId: string): Promise<ServiceRow> {
     const { rows } = await this.pool.query(
-      `INSERT INTO services (product_id, service_type_id, name, region, specs, billing_mode, server_id, tags, created_by)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `INSERT INTO services (product_id, service_type_id, name, region, provider, specs, billing_mode, server_id, tags, created_by)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        RETURNING id`,
       [
         input.product_id,
         input.service_type_id,
         input.name,
         input.region ?? null,
+        input.provider ?? null,
         JSON.stringify(input.specs ?? []),
         input.billing_mode ?? 'monthly',
         input.server_id ?? null,
@@ -95,6 +99,7 @@ export class ServicesService {
     if (patch.service_type_id !== undefined) push('service_type_id', patch.service_type_id);
     if (patch.name !== undefined) push('name', patch.name);
     if (patch.region !== undefined) push('region', patch.region);
+    if (patch.provider !== undefined) push('provider', patch.provider);
     if (patch.specs !== undefined) push('specs', JSON.stringify(patch.specs));
     if (patch.billing_mode !== undefined) push('billing_mode', patch.billing_mode);
     if (patch.server_id !== undefined) push('server_id', patch.server_id);

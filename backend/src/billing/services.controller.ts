@@ -8,6 +8,7 @@ class CreateServiceDto {
   @IsUUID() service_type_id!: string;
   @IsString() name!: string;
   @IsOptional() @IsString() region?: string;
+  @IsOptional() @IsString() provider?: string;
   @IsOptional() @IsArray() specs?: { key: string; value: string }[];
   @IsOptional() @IsIn(['pay_per_use', 'monthly', 'annual']) billing_mode?: BillingMode;
   @IsOptional() @IsUUID() server_id?: string;
@@ -18,6 +19,7 @@ class UpdateServiceDto {
   @IsOptional() @IsUUID() service_type_id?: string;
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() region?: string;
+  @IsOptional() @IsString() provider?: string;
   @IsOptional() @IsArray() specs?: { key: string; value: string }[];
   @IsOptional() @IsIn(['pay_per_use', 'monthly', 'annual']) billing_mode?: BillingMode;
   @IsOptional() @IsUUID() server_id?: string;
@@ -37,8 +39,9 @@ export class ServicesController {
     @Query('product_id') productId?: string,
     @Query('service_type_id') typeId?: string,
     @Query('status') status?: string,
+    @Query('provider') provider?: string,
   ) {
-    return this.services.list({ product_id: productId, service_type_id: typeId, status });
+    return this.services.list({ product_id: productId, service_type_id: typeId, status, provider });
   }
 
   @Get(':id')

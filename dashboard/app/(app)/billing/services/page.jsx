@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 
 const BILLING_MODES = ['pay_per_use', 'monthly', 'annual'];
+const PROVIDERS = ['AWS', 'Azure', 'Huawei Cloud', 'DigitalOcean', 'Other'];
 
 function KeyValueRows({ rows, onChange, keyPlaceholder = 'key', valuePlaceholder = 'value' }) {
   const update = (i, field, value) => {
@@ -30,7 +31,7 @@ function KeyValueRows({ rows, onChange, keyPlaceholder = 'key', valuePlaceholder
 }
 
 const EMPTY_FORM = {
-  product_id: '', service_type_id: '', name: '', region: '',
+  product_id: '', service_type_id: '', name: '', region: '', provider: '',
   billing_mode: 'monthly', server_id: '', specs: [], tags: [],
 };
 
@@ -48,7 +49,7 @@ export default function ServicesPage() {
   const [products, setProducts] = useState([]);
   const [types, setTypes] = useState([]);
   const [servers, setServers] = useState([]);
-  const [filters, setFilters] = useState({ product_id: '', service_type_id: '', status: 'active' });
+  const [filters, setFilters] = useState({ product_id: '', service_type_id: '', status: 'active', provider: '' });
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState(null);
   const [err, setErr] = useState('');
@@ -57,7 +58,7 @@ export default function ServicesPage() {
   const [syncMsg, setSyncMsg] = useState('');
 
   const load = () => api.billingServices(filters).then(setServices).catch((e) => setErr(e.message));
-  useEffect(() => { load(); }, [filters.product_id, filters.service_type_id, filters.status]);
+  useEffect(() => { load(); }, [filters.product_id, filters.service_type_id, filters.status, filters.provider]);
   useEffect(() => {
     api.products().then(setProducts).catch(() => {});
     api.serviceTypes().then(setTypes).catch(() => {});
@@ -74,6 +75,7 @@ export default function ServicesPage() {
       service_type_id: form.service_type_id,
       name: form.name,
       region: form.region || undefined,
+      provider: form.provider || undefined,
       billing_mode: form.billing_mode,
       server_id: form.server_id || undefined,
       specs: form.specs.filter((r) => r.key),
@@ -91,7 +93,7 @@ export default function ServicesPage() {
     setEditingId(s.id);
     setForm({
       product_id: s.product_id, service_type_id: s.service_type_id, name: s.name,
-      region: s.region || '', billing_mode: s.billing_mode, server_id: s.server_id || '',
+      region: s.region || '', provider: s.provider || '', billing_mode: s.billing_mode, server_id: s.server_id || '',
       specs: s.specs || [], tags: tagsObjectToRows(s.tags),
     });
   };
@@ -157,6 +159,10 @@ export default function ServicesPage() {
           <option value="">— all types —</option>
           {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
+        <select value={filters.provider} onChange={(e) => setFilters({ ...filters, provider: e.target.value })}>
+          <option value="">— all providers —</option>
+          {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
+        </select>
         <select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
           <option value="active">Active</option>
           <option value="retired">Retired</option>
@@ -180,6 +186,12 @@ export default function ServicesPage() {
         </label>
         <label>Name<input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
         <label>Region<input value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} /></label>
+        <label>Provider
+          <select value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })}>
+            <option value="">— none —</option>
+            {PROVIDERS.map((p) => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </label>
         <label>Billing mode
           <select value={form.billing_mode} onChange={(e) => setForm({ ...form, billing_mode: e.target.value })}>
             {BILLING_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
@@ -207,7 +219,7 @@ export default function ServicesPage() {
 
       <table className="grid">
         <thead>
-          <tr><th>Project</th><th>Type</th><th>Name</th><th>Region</th><th>Billing mode</th><th>Server</th><th>Status</th><th></th></tr>
+          <tr><th>Project</th><th>Type</th><th>Name</th><th>Region</th><th>Provider</th><th>Billing mode</th><th>Server</th><th>Status</th><th></th></tr>
         </thead>
         <tbody>
           {services.map((s) => (
@@ -216,6 +228,7 @@ export default function ServicesPage() {
               <td>{s.service_type_name}</td>
               <td><b>{s.name}</b></td>
               <td>{s.region || '—'}</td>
+              <td>{s.provider || '—'}</td>
               <td>{s.billing_mode}</td>
               <td>{s.server_name || '—'}</td>
               <td>{s.status}</td>

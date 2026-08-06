@@ -288,6 +288,16 @@ const bcrypt = require('bcryptjs');
     await client.query(fs.readFileSync(defaultSpecFieldsPath, 'utf8'));
   }
 
+  // Apply service-provider migration (idempotent — ADD COLUMN IF NOT
+  // EXISTS). Must run after billing_migration.sql (services exists).
+  const providerPath =
+    process.env.SERVICE_PROVIDER_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/service_provider_migration.sql');
+  if (fs.existsSync(providerPath)) {
+    console.log('Applying service-provider migration...');
+    await client.query(fs.readFileSync(providerPath, 'utf8'));
+  }
+
   const email = process.env.ADMIN_EMAIL || 'admin@example.com';
   const password = process.env.ADMIN_PASSWORD || 'admin123';
   const hash = await bcrypt.hash(password, 10);
