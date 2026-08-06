@@ -76,6 +76,7 @@ export default function Shell({ children }) {
         { href: '/billing/service-types', label: '🏷️ Service Types' },
         { href: '/billing/monthly-entry', label: '📅 Monthly Entry' },
         { href: '/billing/history',       label: '📜 Billing History' },
+        { href: '/billing/report',        label: '📋 Billing Report' },
       ],
     },
     {

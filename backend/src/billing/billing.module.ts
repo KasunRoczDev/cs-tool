@@ -11,6 +11,8 @@ import { BillingRecordsController } from './billing-records.controller';
 import { BillingDashboardService } from './billing-dashboard.service';
 import { BillingInsightsService } from './billing-insights.service';
 import { BillingDashboardController } from './billing-dashboard.controller';
+import { BillingReportService } from './billing-report.service';
+import { BillingReportController } from './billing-report.controller';
 
 @Module({
   imports: [
@@ -20,10 +22,11 @@ import { BillingDashboardController } from './billing-dashboard.controller';
   ],
   providers: [
     ServiceTypesService, ServicesService, BillingRecordsService,
-    BillingDashboardService, BillingInsightsService,
+    BillingDashboardService, BillingInsightsService, BillingReportService,
   ],
   controllers: [
-    ServiceTypesController, ServicesController, BillingRecordsController, BillingDashboardController,
+    ServiceTypesController, ServicesController, BillingRecordsController,
+    BillingDashboardController, BillingReportController,
   ],
   exports: [ServiceTypesService, ServicesService, BillingRecordsService],
 })

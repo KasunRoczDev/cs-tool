@@ -349,5 +349,6 @@ export const api = {
     URL.revokeObjectURL(url);
   },
   billingDashboardSummary: (months, period, month) => req('/billing/dashboard/summary' + qs({ months, period, month })),
+  billingReport: (month, filters) => req('/billing/report' + qs({ month, ...filters })),
   billingInsights: () => req('/billing/dashboard/insights'),
 };
