@@ -28,6 +28,8 @@ import { DashboardController } from './dashboard.controller';
 import { AgentReleasesService } from './agent-releases.service';
 import { AgentReleasesController } from './agent-releases.controller';
 import { AgentUpdatesController } from './agent-updates.controller';
+import { AppsService } from './apps.service';
+import { AppsController } from './apps.controller';
 
 /**
  * Release Management — repositories, versions, releases (draft builder, repo
@@ -55,6 +57,7 @@ import { AgentUpdatesController } from './agent-updates.controller';
     AuditService,
     DashboardService,
     AgentReleasesService,
+    AppsService,
   ],
   controllers: [
     RepositoriesController,
@@ -70,6 +73,7 @@ import { AgentUpdatesController } from './agent-updates.controller';
     DashboardController,
     AgentReleasesController,
     AgentUpdatesController,
+    AppsController,
   ],
   exports: [RepositoriesService, ReleasesService, DeploymentsService, GitService, ApprovalsService],
 })
