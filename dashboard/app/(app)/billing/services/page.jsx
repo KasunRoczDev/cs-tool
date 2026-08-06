@@ -96,6 +96,14 @@ export default function ServicesPage() {
     });
   };
 
+  const onServiceTypeChange = (typeId) => {
+    const type = types.find((t) => t.id === typeId);
+    const fields = type?.spec_fields || [];
+    const existingByKey = Object.fromEntries(form.specs.map((r) => [r.key, r.value]));
+    const specs = fields.map((key) => ({ key, value: existingByKey[key] ?? '' }));
+    setForm({ ...form, service_type_id: typeId, specs });
+  };
+
   const retire = async (s) => {
     if (!confirm(`Retire "${s.name}"? It will stop appearing in monthly billing entry.`)) return;
     try { await api.retireBillingService(s.id); load(); } catch (e) { setErr(e.message); }
@@ -165,7 +173,7 @@ export default function ServicesPage() {
           </select>
         </label>
         <label>Service Type
-          <select required value={form.service_type_id} onChange={(e) => setForm({ ...form, service_type_id: e.target.value })}>
+          <select required value={form.service_type_id} onChange={(e) => onServiceTypeChange(e.target.value)}>
             <option value="">— select —</option>
             {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
