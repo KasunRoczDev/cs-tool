@@ -16,9 +16,10 @@ export class BillingDashboardController {
     @Query('months') months?: string,
     @Query('period') period?: string,
     @Query('month') month?: string,
+    @Query('product_id') productId?: string,
   ) {
     const scope: PeriodScope = period === 'year' || period === 'all' ? period : 'month';
-    return this.dashboard.summary(months ? parseInt(months, 10) : 6, scope, month);
+    return this.dashboard.summary(months ? parseInt(months, 10) : 6, scope, month, productId);
   }
 
   @Get('insights')

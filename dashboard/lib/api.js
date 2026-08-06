@@ -348,7 +348,8 @@ export const api = {
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(url);
   },
-  billingDashboardSummary: (months, period, month) => req('/billing/dashboard/summary' + qs({ months, period, month })),
+  billingDashboardSummary: (months, period, month, productId) =>
+    req('/billing/dashboard/summary' + qs({ months, period, month, product_id: productId })),
   billingReport: (month, filters) => req('/billing/report' + qs({ month, ...filters })),
   billingInsights: () => req('/billing/dashboard/insights'),
 };
