@@ -298,6 +298,17 @@ const bcrypt = require('bcryptjs');
     await client.query(fs.readFileSync(providerPath, 'utf8'));
   }
 
+  // Apply apps-directory migration (idempotent — IF NOT EXISTS). Must run
+  // after release_migration.sql (repositories, products, channels) and
+  // schema.sql (servers, users).
+  const appsPath =
+    process.env.APPS_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/apps_migration.sql');
+  if (fs.existsSync(appsPath)) {
+    console.log('Applying apps-directory migration...');
+    await client.query(fs.readFileSync(appsPath, 'utf8'));
+  }
+
   const email = process.env.ADMIN_EMAIL || 'admin@example.com';
   const password = process.env.ADMIN_PASSWORD || 'admin123';
   const hash = await bcrypt.hash(password, 10);
