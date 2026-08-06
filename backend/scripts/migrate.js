@@ -277,6 +277,17 @@ const bcrypt = require('bcryptjs');
     await client.query(fs.readFileSync(specFieldsPath, 'utf8'));
   }
 
+  // Apply default spec-fields seed migration (idempotent — only touches
+  // rows still at the '[]' default). Must run after
+  // service_type_spec_fields_migration.sql (spec_fields column exists).
+  const defaultSpecFieldsPath =
+    process.env.SERVICE_TYPE_DEFAULT_SPEC_FIELDS_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/service_type_default_spec_fields_migration.sql');
+  if (fs.existsSync(defaultSpecFieldsPath)) {
+    console.log('Applying default spec-fields seed migration...');
+    await client.query(fs.readFileSync(defaultSpecFieldsPath, 'utf8'));
+  }
+
   const email = process.env.ADMIN_EMAIL || 'admin@example.com';
   const password = process.env.ADMIN_PASSWORD || 'admin123';
   const hash = await bcrypt.hash(password, 10);
