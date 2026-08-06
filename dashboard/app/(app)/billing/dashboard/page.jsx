@@ -99,10 +99,17 @@ export default function BillingDashboardPage() {
         <>
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
             <StatTile title={periodLabel(summary)} value={fmt(summary.period_total)} />
-            <StatTile title="Projects with spend" value={summary.by_project.length}
-              sub={productId ? 'Filtered to 1 project' : undefined} />
-            <StatTile title="Avg per project"
-              value={summary.by_project.length ? fmt(summary.period_total / summary.by_project.length) : fmt(0)} />
+            {productId ? (
+              <StatTile title="Avg per month"
+                value={summary.trend.length ? fmt(summary.trend.reduce((s, t) => s + t.total, 0) / summary.trend.length) : fmt(0)}
+                sub={`Across ${summary.trend.length} billed month${summary.trend.length === 1 ? '' : 's'}`} />
+            ) : (
+              <>
+                <StatTile title="Projects with spend" value={summary.by_project.length} />
+                <StatTile title="Avg per project"
+                  value={summary.by_project.length ? fmt(summary.period_total / summary.by_project.length) : fmt(0)} />
+              </>
+            )}
           </div>
 
           <div className="card" style={{ marginBottom: 20 }}>
