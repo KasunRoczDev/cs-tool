@@ -56,6 +56,7 @@ export default function Shell({ children }) {
       section: 'Monitoring',
       items: [
         { href: '/products',             label: '📦 Products' },
+        { href: '/apps',                 label: '🗂️ Apps' },
         { href: '/topology',             label: '🕸️ Topology' },
         { href: '/performance',          label: '📈 Performance' },
         { href: '/service-metrics',      label: '📊 Service Metrics' },
