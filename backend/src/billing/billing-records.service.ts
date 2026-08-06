@@ -33,7 +33,7 @@ export interface BillingRecordRow {
   updated_at: string;
 }
 
-function firstOfMonth(month: string): string {
+export function firstOfMonth(month: string): string {
   const d = new Date(month);
   if (isNaN(d.getTime())) throw new BadRequestException('month must be a valid date');
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-01`;
