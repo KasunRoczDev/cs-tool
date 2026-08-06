@@ -93,6 +93,36 @@ CPU / memory / disk thresholds, SSH brute-force (failed-login burst), and server
 offline (periodic check). Thresholds are configured via backend env vars
 (`ALERT_*`). Open alerts are de-duplicated per server+type and broadcast live.
 
+## Billing Management
+
+Tracks cloud service cost per Enterprise Project (the existing `products`
+table doubles as "Enterprise Project"):
+
+1. **Service Types** (`/billing/service-types`) — an admin-managed catalog
+   (ECS, RDS, OBS, Storage, Redis, …).
+2. **Services** (`/billing/services`) — the inventory: one row per cloud
+   service instance, with project, type, region, structured specs, billing
+   mode (`pay_per_use` / `monthly` / `annual`), optional tags, and an
+   optional link to a monitored server.
+3. **Monthly Entry** (`/billing/monthly-entry`) — pick a project + month,
+   fill in the billed amount for every service due that month in one pass.
+4. **Billing History** (`/billing/history`) — filterable record history +
+   CSV export.
+5. **Billing Dashboard** (`/billing/dashboard`) — current month total,
+   spend trend, breakdowns by project/service type, and rule-based cost
+   insights (flags services whose linked server is idle or offline but
+   still billed).
+
+Global currency is set once, in Settings → Billing.
+
+Backend routes: `GET/POST /api/v1/billing/service-types`,
+`GET/POST/PATCH /api/v1/billing/services` (+ `/:id/retire`,
+`/:id/reactivate`), `GET /api/v1/billing/monthly-form`,
+`POST /api/v1/billing/records/bulk`, `GET/PATCH/DELETE
+/api/v1/billing/records[/:id]`, `GET /api/v1/billing/records/export.csv`,
+`GET /api/v1/billing/dashboard/summary`,
+`GET /api/v1/billing/dashboard/insights`.
+
 ## Security notes
 
 - TLS for all agent traffic (set `tls_verify: true`); API key per server, stored hashed (sha256).
