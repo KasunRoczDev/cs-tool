@@ -32,6 +32,8 @@ import { AppsService } from './apps.service';
 import { AppsController } from './apps.controller';
 import { ServerAppsService } from './server-apps.service';
 import { ServerAppsController } from './server-apps.controller';
+import { AppEnvVarsService } from './app-env-vars.service';
+import { AppEnvVarsController } from './app-env-vars.controller';
 
 /**
  * Release Management — repositories, versions, releases (draft builder, repo
@@ -61,6 +63,7 @@ import { ServerAppsController } from './server-apps.controller';
     AgentReleasesService,
     AppsService,
     ServerAppsService,
+    AppEnvVarsService,
   ],
   controllers: [
     RepositoriesController,
@@ -78,6 +81,7 @@ import { ServerAppsController } from './server-apps.controller';
     AgentUpdatesController,
     AppsController,
     ServerAppsController,
+    AppEnvVarsController,
   ],
   exports: [RepositoriesService, ReleasesService, DeploymentsService, GitService, ApprovalsService],
 })
