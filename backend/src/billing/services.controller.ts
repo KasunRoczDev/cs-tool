@@ -23,6 +23,9 @@ class UpdateServiceDto {
   @IsOptional() @IsUUID() server_id?: string;
   @IsOptional() @IsObject() tags?: Record<string, string>;
 }
+class SyncServersDto {
+  @IsUUID() service_type_id!: string;
+}
 
 @UseGuards(JwtAuthGuard)
 @Controller('billing/services')
@@ -47,6 +50,12 @@ export class ServicesController {
   @Post()
   create(@Body() dto: CreateServiceDto, @Req() req: any) {
     return this.services.create(dto, req.user.sub);
+  }
+
+  @Roles('admin', 'operator')
+  @Post('sync-servers')
+  syncFromServers(@Body() dto: SyncServersDto, @Req() req: any) {
+    return this.services.syncFromServers(dto.service_type_id, req.user.sub);
   }
 
   @Roles('admin', 'operator')

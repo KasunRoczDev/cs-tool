@@ -115,4 +115,41 @@ export class ServicesService {
     if (!rowCount) throw new NotFoundException('Service not found');
     return this.get(id);
   }
+
+  /**
+   * Create one billing service per monitored server that has an Enterprise
+   * Project assigned and isn't already linked to a service. Servers with no
+   * project are reported back (not created) since services.product_id is
+   * required — the operator needs to assign a project first.
+   */
+  async syncFromServers(
+    serviceTypeId: string,
+    userId: string,
+  ): Promise<{ created: { id: string; name: string }[]; skipped_no_project: { id: string; name: string }[] }> {
+    const { rows: eligible } = await this.pool.query(
+      `SELECT id, name, product_id
+         FROM servers
+        WHERE product_id IS NOT NULL
+          AND id NOT IN (SELECT server_id FROM services WHERE server_id IS NOT NULL)`,
+    );
+    const { rows: skipped } = await this.pool.query(
+      `SELECT id, name
+         FROM servers
+        WHERE product_id IS NULL
+          AND id NOT IN (SELECT server_id FROM services WHERE server_id IS NOT NULL)`,
+    );
+
+    const created: { id: string; name: string }[] = [];
+    for (const sv of eligible) {
+      const { rows } = await this.pool.query(
+        `INSERT INTO services (product_id, service_type_id, name, billing_mode, server_id, created_by)
+         VALUES ($1, $2, $3, 'monthly', $4, $5)
+         RETURNING id, name`,
+        [sv.product_id, serviceTypeId, sv.name, sv.id, userId],
+      );
+      created.push(rows[0]);
+    }
+
+    return { created, skipped_no_project: skipped };
+  }
 }
