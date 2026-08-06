@@ -234,6 +234,43 @@ function SmtpSection() {
   );
 }
 
+// ── Billing Section ───────────────────────────────────────────────────────
+function BillingCurrencySection() {
+  const isAdmin = getRole() === 'admin';
+  const [currency, setCurrency] = useState('USD');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState('');
+
+  useEffect(() => {
+    api.getSettings().then((s) => setCurrency(s.billing_currency || 'USD'))
+      .catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.saveSettings({ billing_currency: currency });
+      setToast('Saved');
+      setTimeout(() => setToast(''), 3000);
+    } catch (e) { setToast(e.message); }
+    setSaving(false);
+  };
+
+  if (loading) return null;
+
+  return (
+    <Section title="Billing" description="Global currency used across the Billing dashboard and reports.">
+      <Field label="Currency" hint="e.g. USD, LKR — applies to every billing amount platform-wide.">
+        <input value={currency} disabled={!isAdmin} style={{ width: 100 }}
+          onChange={(e) => setCurrency(e.target.value.toUpperCase())} />
+        {isAdmin && <button onClick={save} disabled={saving} style={{ marginLeft: 8 }}>{saving ? 'Saving…' : 'Save'}</button>}
+        {toast && <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--muted)' }}>{toast}</span>}
+      </Field>
+    </Section>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────
 export default function SettingsPage() {
   return (
@@ -245,6 +282,7 @@ export default function SettingsPage() {
 
       <ThemeSection />
       <SmtpSection />
+      <BillingCurrencySection />
     </div>
   );
 }
