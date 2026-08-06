@@ -260,6 +260,32 @@ tokens) — without it, saving or reading any secret value throws.
 
 ---
 
+## 🗂️ Apps Directory
+
+Documents which apps run on which monitored server — separate from (and
+not fed into) the deploy pipeline above.
+
+- **Apps** (`/apps`) — one entry per running application/service. Can
+  optionally link to an existing Repository (for ones with a tracked git
+  repo) and/or an Enterprise Project; neither is required, so entries
+  without their own repo (e.g. an internal auth layer) fit too.
+- **Servers hosting an app** — many-to-many: a server can host several
+  apps, an app can run on several servers. Each server+app pairing has
+  its own free-text Nginx vhost config, PHP-FPM pool config, and php.ini
+  overrides, editable from either the app's page or the server's detail
+  page — both show the same underlying data.
+- **Environment variables** — app-scoped, optionally further scoped to
+  one of the existing deploy channels (Canary/Beta/Production/
+  Enterprise) or left in the channel-less "general" bucket for apps that
+  don't distinguish environments. Same secret-encryption behavior as
+  channel Environments above: mark a value secret to encrypt it at rest,
+  and the UI only ever shows that one is set, never the value.
+
+Requires `TOKEN_ENC_KEY` to be set, same as channel Environments, for any
+secret app env var.
+
+---
+
 ## 🧭 Workflow Configuration *(admin only)*
 
 Build a custom release status workflow per product instead of the seeded
