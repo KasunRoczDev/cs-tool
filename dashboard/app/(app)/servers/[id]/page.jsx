@@ -7,6 +7,7 @@ import { getSocket } from '@/lib/socket';
 import MetricChart from '@/components/MetricChart';
 import PaginatedEventList from '@/components/PaginatedEventList';
 import RegenerateKey from '@/components/RegenerateKey';
+import ServerAppConfigCard from '@/components/ServerAppConfigCard';
 
 const MAX_POINTS = 120;
 const fmt = (iso) => new Date(iso).toLocaleTimeString();
@@ -16,6 +17,10 @@ export default function ServerDetailPage() {
   const [server, setServer] = useState(null);
   const [series, setSeries] = useState([]);
   const [events, setEvents] = useState([]);
+  const [hostedApps, setHostedApps] = useState([]);
+  const [allApps, setAllApps] = useState([]);
+  const [linkAppId, setLinkAppId] = useState('');
+  const [appsErr, setAppsErr] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -28,6 +33,8 @@ export default function ServerDetailPage() {
       }))),
     ).catch(() => {});
     api.securityEvents(id).then(setEvents).catch(() => {});
+    api.serverApps(id).then(setHostedApps).catch(() => {});
+    api.apps().then(setAllApps).catch(() => {});
 
     const s = getSocket();
     if (!s) return;
@@ -50,6 +57,27 @@ export default function ServerDetailPage() {
       s.off('security_event', onEvent);
     };
   }, [id]);
+
+  const loadHostedApps = () => api.serverApps(id).then(setHostedApps).catch((e) => setAppsErr(e.message));
+
+  const linkApp = async () => {
+    if (!linkAppId) { setAppsErr('Pick an app first'); return; }
+    setAppsErr('');
+    try {
+      await api.linkServerApp(id, { app_id: linkAppId });
+      setLinkAppId('');
+      await loadHostedApps();
+    } catch (e) { setAppsErr(e.message); }
+  };
+
+  const unlinkApp = async (a) => {
+    if (!confirm(`Unlink "${a.app_name}"?`)) return;
+    setAppsErr('');
+    try {
+      await api.unlinkServerApp(id, a.app_id);
+      await loadHostedApps();
+    } catch (e) { setAppsErr(e.message); }
+  };
 
   if (!server) return <div>Loading…</div>;
 
@@ -89,6 +117,33 @@ export default function ServerDetailPage() {
         title="Recent security events"
         itemsPerPage={15}
       />
+
+      <div className="page-head" style={{ marginTop: '24px', marginBottom: '12px' }}>
+        <h3 style={{ margin: 0 }}>Hosted apps</h3>
+      </div>
+      {appsErr && <div className="error">{appsErr}</div>}
+      <div className="inline-form" style={{ marginBottom: 8 }}>
+        <select value={linkAppId} onChange={(e) => setLinkAppId(e.target.value)}>
+          <option value="">— select app —</option>
+          {allApps
+            .filter((a) => !hostedApps.some((h) => h.app_id === a.id))
+            .map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+        </select>
+        <button onClick={linkApp}>Link app</button>
+      </div>
+      {hostedApps.length === 0 ? (
+        <p className="empty">No apps linked to this server yet.</p>
+      ) : (
+        hostedApps.map((a) => (
+          <ServerAppConfigCard
+            key={a.id}
+            title={a.app_name}
+            config={a}
+            onSave={(edits) => api.updateServerApp(id, a.app_id, edits).then(loadHostedApps)}
+            onUnlink={() => unlinkApp(a)}
+          />
+        ))
+      )}
     </div>
   );
 }
