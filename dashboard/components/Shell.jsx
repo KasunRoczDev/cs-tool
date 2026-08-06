@@ -69,6 +69,16 @@ export default function Shell({ children }) {
       ],
     },
     {
+      section: 'Billing',
+      items: [
+        { href: '/billing/dashboard',     label: '💰 Billing Dashboard' },
+        { href: '/billing/services',      label: '🧾 Services' },
+        { href: '/billing/service-types', label: '🏷️ Service Types' },
+        { href: '/billing/monthly-entry', label: '📅 Monthly Entry' },
+        { href: '/billing/history',       label: '📜 Billing History' },
+      ],
+    },
+    {
       section: 'Release Management',
       items: [
         { href: '/release-dashboard', label: '🏠 Release Dashboard' },
