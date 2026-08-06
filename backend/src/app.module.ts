@@ -17,6 +17,7 @@ import { TopologyModule } from './topology/topology.module';
 import { ReleaseModule } from './release/release.module';
 import { AiModule } from './ai/ai.module';
 import { AccessModule } from './access/access.module';
+import { BillingModule } from './billing/billing.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { AccessModule } from './access/access.module';
     ReleaseModule,
     AiModule,
     AccessModule,
+    BillingModule,
   ],
 })
 export class AppModule {}
