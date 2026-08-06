@@ -257,6 +257,16 @@ const bcrypt = require('bcryptjs');
     await client.query(fs.readFileSync(billingPath, 'utf8'));
   }
 
+  // Apply RDS engine service types migration (idempotent — ON CONFLICT DO
+  // NOTHING). Must run after billing_migration.sql (service_types exists).
+  const rdsEnginesPath =
+    process.env.RDS_ENGINE_SERVICE_TYPES_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/rds_engine_service_types_migration.sql');
+  if (fs.existsSync(rdsEnginesPath)) {
+    console.log('Applying RDS engine service types migration...');
+    await client.query(fs.readFileSync(rdsEnginesPath, 'utf8'));
+  }
+
   const email = process.env.ADMIN_EMAIL || 'admin@example.com';
   const password = process.env.ADMIN_PASSWORD || 'admin123';
   const hash = await bcrypt.hash(password, 10);
