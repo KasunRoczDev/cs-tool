@@ -1,5 +1,5 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from '@nestjs/common';
-import { IsOptional, IsString } from 'class-validator';
+import { IsArray, IsOptional, IsString } from 'class-validator';
 import { JwtAuthGuard, Roles } from '../common/jwt-auth.guard';
 import { ServiceTypesService } from './service-types.service';
 
@@ -7,11 +7,13 @@ class CreateServiceTypeDto {
   @IsString() key!: string;
   @IsString() name!: string;
   @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsArray() spec_fields?: string[];
 }
 class UpdateServiceTypeDto {
   @IsOptional() @IsString() key?: string;
   @IsOptional() @IsString() name?: string;
   @IsOptional() @IsString() description?: string;
+  @IsOptional() @IsArray() spec_fields?: string[];
 }
 
 @UseGuards(JwtAuthGuard)
@@ -27,7 +29,7 @@ export class ServiceTypesController {
   @Roles('admin', 'operator')
   @Post()
   create(@Body() dto: CreateServiceTypeDto) {
-    return this.serviceTypes.create(dto.key, dto.name, dto.description);
+    return this.serviceTypes.create(dto.key, dto.name, dto.description, dto.spec_fields);
   }
 
   @Roles('admin', 'operator')

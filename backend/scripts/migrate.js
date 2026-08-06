@@ -267,6 +267,16 @@ const bcrypt = require('bcryptjs');
     await client.query(fs.readFileSync(rdsEnginesPath, 'utf8'));
   }
 
+  // Apply service-type spec-fields migration (idempotent — ADD COLUMN IF NOT
+  // EXISTS). Must run after billing_migration.sql (service_types exists).
+  const specFieldsPath =
+    process.env.SERVICE_TYPE_SPEC_FIELDS_MIGRATION_PATH ||
+    path.resolve(__dirname, '../../database/service_type_spec_fields_migration.sql');
+  if (fs.existsSync(specFieldsPath)) {
+    console.log('Applying service-type spec-fields migration...');
+    await client.query(fs.readFileSync(specFieldsPath, 'utf8'));
+  }
+
   const email = process.env.ADMIN_EMAIL || 'admin@example.com';
   const password = process.env.ADMIN_PASSWORD || 'admin123';
   const hash = await bcrypt.hash(password, 10);
