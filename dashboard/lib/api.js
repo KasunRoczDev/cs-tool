@@ -328,6 +328,8 @@ export const api = {
   updateBillingService: (id, body) => req(`/billing/services/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
   retireBillingService: (id) => req(`/billing/services/${id}/retire`, { method: 'POST' }),
   reactivateBillingService: (id) => req(`/billing/services/${id}/reactivate`, { method: 'POST' }),
+  syncServersToBilling: (serviceTypeId) =>
+    req('/billing/services/sync-servers', { method: 'POST', body: JSON.stringify({ service_type_id: serviceTypeId }) }),
   monthlyBillingForm: (productId, month) => req(`/billing/monthly-form${qs({ product_id: productId, month })}`),
   bulkBillingRecords: (body) => req('/billing/records/bulk', { method: 'POST', body: JSON.stringify(body) }),
   billingRecords: (filters) => req('/billing/records' + qs(filters)),

@@ -52,6 +52,9 @@ export default function ServicesPage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [editingId, setEditingId] = useState(null);
   const [err, setErr] = useState('');
+  const [syncTypeId, setSyncTypeId] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [syncMsg, setSyncMsg] = useState('');
 
   const load = () => api.billingServices(filters).then(setServices).catch((e) => setErr(e.message));
   useEffect(() => { load(); }, [filters.product_id, filters.service_type_id, filters.status]);
@@ -101,12 +104,41 @@ export default function ServicesPage() {
     try { await api.reactivateBillingService(s.id); load(); } catch (e) { setErr(e.message); }
   };
 
+  const syncFromServers = async () => {
+    if (!syncTypeId) { setErr('Pick a service type to use for synced servers first'); return; }
+    setErr('');
+    setSyncMsg('');
+    setSyncing(true);
+    try {
+      const r = await api.syncServersToBilling(syncTypeId);
+      setSyncMsg(
+        `Created ${r.created.length} service(s).` +
+        (r.skipped_no_project.length
+          ? ` Skipped ${r.skipped_no_project.length} server(s) with no Enterprise Project assigned: ${r.skipped_no_project.map((s) => s.name).join(', ')}.`
+          : ''),
+      );
+      load();
+    } catch (e) { setErr(e.message); }
+    setSyncing(false);
+  };
+
   const productServers = servers.filter((sv) => !form.product_id || sv.product_id === form.product_id);
 
   return (
     <div>
       <div className="page-head"><h2>🧾 Services</h2></div>
       {err && <div className="error">{err}</div>}
+
+      <div className="inline-form" style={{ marginBottom: 16 }}>
+        <select value={syncTypeId} onChange={(e) => setSyncTypeId(e.target.value)}>
+          <option value="">— service type for synced servers —</option>
+          {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+        <button type="button" onClick={syncFromServers} disabled={syncing}>
+          {syncing ? 'Syncing…' : 'Sync from Servers'}
+        </button>
+      </div>
+      {syncMsg && <div className="hint" style={{ marginBottom: 16 }}>{syncMsg}</div>}
 
       <div className="inline-form" style={{ marginBottom: 16 }}>
         <select value={filters.product_id} onChange={(e) => setFilters({ ...filters, product_id: e.target.value })}>
