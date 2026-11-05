@@ -13,10 +13,8 @@ function EnvTag({ env }) {
   if (!env) return null;
   const color = ENV_COLORS[env] || '#888';
   return (
-    <span style={{
-      display: 'inline-block', padding: '2px 8px', borderRadius: '12px',
-      fontSize: '11px', fontWeight: 600, textTransform: 'uppercase',
-      background: color + '22', color, border: `1px solid ${color}66`,
+    <span className="overview-env-tag" style={{
+      '--env-color': color, '--env-background': color + '22', '--env-border': color + '66',
     }}>{env}</span>
   );
 }
@@ -35,17 +33,14 @@ function EnvEditor({ serverId, currentEnv, onSaved }) {
   };
 
   return (
-    <span style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
+    <span className="overview-inline-editor">
       <select value={val} onChange={(e) => setVal(e.target.value)}
-        style={{ fontSize: '11px', padding: '2px 4px', borderRadius: '4px',
-          background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--fg)' }}>
+        className="overview-editor-select" aria-label="Server environment">
         <option value="">— none —</option>
         {ENV_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
-      <button onClick={save} disabled={saving}
-        style={{ fontSize: '10px', padding: '2px 6px', cursor: 'pointer', borderRadius: '4px',
-          background: 'var(--accent)', color: '#fff', border: 'none' }}>
-        {saving ? '…' : '✓'}
+      <button type="button" onClick={save} disabled={saving} className="btn-primary overview-save-button">
+        {saving ? 'Saving…' : 'Save'}
       </button>
     </span>
   );
@@ -66,17 +61,14 @@ function ProductEditor({ serverId, currentProductId, products, onSaved }) {
   };
 
   return (
-    <span style={{ display: 'inline-flex', gap: '4px', alignItems: 'center' }}>
+    <span className="overview-inline-editor">
       <select value={val} onChange={(e) => setVal(e.target.value)}
-        style={{ fontSize: '11px', padding: '2px 4px', borderRadius: '4px',
-          background: 'var(--panel-2)', border: '1px solid var(--border)', color: 'var(--fg)' }}>
+        className="overview-editor-select" aria-label="Server product">
         <option value="">— unassigned —</option>
         {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
       </select>
-      <button onClick={save} disabled={saving}
-        style={{ fontSize: '10px', padding: '2px 6px', cursor: 'pointer', borderRadius: '4px',
-          background: 'var(--accent)', color: '#fff', border: 'none' }}>
-        {saving ? '…' : '✓'}
+      <button type="button" onClick={save} disabled={saving} className="btn-primary overview-save-button">
+        {saving ? 'Saving…' : 'Save'}
       </button>
     </span>
   );
@@ -87,7 +79,9 @@ function bar(value) {
   const cls = v >= 90 ? 'crit' : v >= 75 ? 'warn' : 'ok';
   return (
     <div className="meter">
-      <div className={`meter-fill ${cls}`} style={{ width: `${Math.min(100, v)}%` }} />
+      <div className="overview-meter-track">
+        <div className={`meter-fill ${cls}`} style={{ width: `${Math.min(100, v)}%` }} />
+      </div>
       <span>{value == null ? '—' : `${v.toFixed(0)}%`}</span>
     </div>
   );
@@ -171,111 +165,126 @@ export default function OverviewPage() {
     setRows((rs) => rs.map((s) => (s.id === id ? { ...s, product_id: productId, product_name: productName } : s)));
 
   return (
-    <div>
-      <div className="page-head">
-        <h2>Server Overview</h2>
-        <button onClick={() => setShowReg(true)}>+ Add server</button>
-      </div>
+    <div className="overview-page">
+      <header className="page-head overview-header">
+        <div>
+          <h1>Server Overview</h1>
+          <p>Server health and resource usage across products and environments.</p>
+        </div>
+        <div className="overview-actions">
+          <button type="button" className="btn-primary" onClick={() => setShowReg(true)}>Add server</button>
+        </div>
+      </header>
       {showReg && <RegisterServer onClose={() => { setShowReg(false); load(); }} />}
 
       {/* Summary Cards */}
-      <div className="metrics-grid" style={{ marginBottom: '24px' }}>
-        <div className="metric-card">
-          <h3>Total Servers</h3>
-          <div className="value">{rows.length}</div>
-          <div className="trend">Monitoring</div>
+      <section className="overview-metrics" aria-label="Server summary">
+        <div className="overview-metric">
+          <h2 className="overview-metric-label">Total Servers</h2>
+          <div className="overview-metric-value">{rows.length}</div>
+          <div className="overview-metric-meta">Monitoring</div>
         </div>
-        <div className="metric-card">
-          <h3>Products</h3>
-          <div className="value">{products.length}</div>
-          <div className="trend">Tracked products</div>
+        <div className="overview-metric">
+          <h2 className="overview-metric-label">Products</h2>
+          <div className="overview-metric-value">{products.length}</div>
+          <div className="overview-metric-meta">Tracked products</div>
         </div>
-        <div className="metric-card">
-          <h3>Online</h3>
-          <div className="value" style={{ color: 'var(--ok)' }}>{onlineCount}</div>
-          <div className="trend">{rows.length > 0 ? ((onlineCount / rows.length) * 100).toFixed(0) : 0}% available</div>
+        <div className="overview-metric">
+          <h2 className="overview-metric-label">Online</h2>
+          <div className="overview-metric-value is-online">{onlineCount}</div>
+          <div className="overview-metric-meta">{rows.length > 0 ? ((onlineCount / rows.length) * 100).toFixed(0) : 0}% available</div>
         </div>
-        <div className="metric-card">
-          <h3>Offline</h3>
-          <div className="value" style={{ color: 'var(--crit)' }}>{offlineCount}</div>
-          <div className="trend">Needs attention</div>
+        <div className="overview-metric">
+          <h2 className="overview-metric-label">Offline</h2>
+          <div className="overview-metric-value is-offline">{offlineCount}</div>
+          <div className="overview-metric-meta">Needs attention</div>
         </div>
-        <div className="metric-card">
-          <h3>Live</h3>
-          <div className="value" style={{ color: ENV_COLORS.live }}>{liveCount}</div>
-          <div className="trend">Production servers</div>
+        <div className="overview-metric">
+          <h2 className="overview-metric-label">Live</h2>
+          <div className="overview-metric-value is-live">{liveCount}</div>
+          <div className="overview-metric-meta">Production servers</div>
         </div>
-        <div className="metric-card">
-          <h3>Staging</h3>
-          <div className="value" style={{ color: ENV_COLORS.staging }}>{stagingCount}</div>
-          <div className="trend">Pre-prod servers</div>
+        <div className="overview-metric">
+          <h2 className="overview-metric-label">Staging</h2>
+          <div className="overview-metric-value is-staging">{stagingCount}</div>
+          <div className="overview-metric-meta">Pre-prod servers</div>
         </div>
-        <div className="metric-card">
-          <h3>Avg CPU</h3>
-          <div className="value" style={{ color: 'var(--warn)' }}>{avgCpu}%</div>
-          <div className="trend">Average load</div>
+        <div className="overview-metric">
+          <h2 className="overview-metric-label">Avg CPU</h2>
+          <div className="overview-metric-value is-cpu">{avgCpu}%</div>
+          <div className="overview-metric-meta">Average load</div>
         </div>
-        <div className="metric-card">
-          <h3>Avg Memory</h3>
-          <div className="value" style={{ color: 'var(--accent)' }}>{avgMemory}%</div>
-          <div className="trend">Average usage</div>
+        <div className="overview-metric">
+          <h2 className="overview-metric-label">Avg Memory</h2>
+          <div className="overview-metric-value">{avgMemory}%</div>
+          <div className="overview-metric-meta">Average usage</div>
         </div>
-      </div>
+      </section>
 
       {/* Filter by env */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center' }}>
-        <span style={{ fontSize: '13px', color: 'var(--muted)' }}>Filter env:</span>
+      <div className="overview-filter overview-section" role="group" aria-labelledby="overview-environment-label">
+        <span id="overview-environment-label" className="overview-filter-label">Environment</span>
+        <div className="overview-filter-options">
         {['', ...ENV_OPTIONS].map((e) => (
-          <button key={e} onClick={() => setEnvFilter(e)}
-            style={{ fontSize: '12px', padding: '3px 10px', borderRadius: '12px', cursor: 'pointer',
-              border: `1px solid ${envFilter === e ? 'var(--accent)' : 'var(--border)'}`,
-              background: envFilter === e ? 'var(--accent)' : 'var(--panel)',
-              color: envFilter === e ? '#fff' : 'var(--fg)' }}>
+          <button key={e} type="button" onClick={() => setEnvFilter(e)}
+            className={`overview-filter-button focus-ring${envFilter === e ? ' is-selected' : ''}`}
+            aria-pressed={envFilter === e}>
             {e || 'All'}
           </button>
         ))}
+        </div>
       </div>
 
       {/* One section per product */}
       {groups.map(([productName, servers]) => {
         const isCollapsed = collapsed[productName];
         const online = servers.filter((r) => r.status === 'online').length;
+        const panelId = `overview-servers-${encodeURIComponent(productName)}`;
+        const groupLabel = productName === UNASSIGNED ? 'Unassigned' : productName;
         return (
-          <div key={productName}
-            style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden', marginBottom: '18px' }}>
-            <div
-              onClick={() => setCollapsed((c) => ({ ...c, [productName]: !c[productName] }))}
-              style={{ padding: '14px 16px', borderBottom: isCollapsed ? 'none' : '1px solid var(--border)',
-                backgroundColor: 'var(--panel-2)', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <h3 style={{ margin: 0, fontSize: '15px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '12px', color: 'var(--muted)' }}>{isCollapsed ? '▶' : '▼'}</span>
-                {productName === UNASSIGNED ? '📦 Unassigned' : `📦 ${productName}`}
-              </h3>
-              <span style={{ fontSize: '12px', color: 'var(--muted)' }}>
-                {servers.length} server{servers.length !== 1 ? 's' : ''} · {online} online
-              </span>
-            </div>
-            {!isCollapsed && (
-              <div style={{ overflowX: 'auto' }}>
-                <table className="grid" style={{ margin: 0, borderRadius: 0 }}>
-                  <thead style={{ backgroundColor: 'var(--panel-2)' }}>
-                    <tr><th>Status</th><th>Name</th><th>Environment</th><th>Product</th><th>CPU</th><th>Memory</th><th>Disk</th><th>Last seen</th></tr>
+          <section key={productName} className="overview-product-group" aria-label={groupLabel}>
+            <h2 className="overview-group-heading">
+              <button type="button" className="overview-product-group-head overview-group-toggle"
+                aria-expanded={!isCollapsed} aria-controls={panelId}
+                onClick={() => setCollapsed((c) => ({ ...c, [productName]: !c[productName] }))}>
+                <span className="overview-group-title">
+                  <svg className="overview-group-chevron" width="16" height="16" viewBox="0 0 24 24"
+                    fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"
+                    strokeLinejoin="round" aria-hidden="true" focusable="false">
+                    <path d={isCollapsed ? 'm9 6 6 6-6 6' : 'm6 9 6 6 6-6'} />
+                  </svg>
+                  <span>{groupLabel}</span>
+                </span>
+                <span className="overview-group-count">
+                  {servers.length} server{servers.length !== 1 ? 's' : ''} · {online} online
+                </span>
+              </button>
+            </h2>
+            <div id={panelId} className="overview-table-wrap focus-ring" hidden={isCollapsed}
+              role="region" aria-label={`${groupLabel} servers`} tabIndex={0}>
+              {!isCollapsed && (
+                <table className="grid overview-server-table" aria-label={`${groupLabel} servers`}>
+                  <thead>
+                    <tr><th scope="col">Status</th><th scope="col">Name</th><th scope="col">Environment</th><th scope="col">Product</th><th scope="col">CPU</th><th scope="col">Memory</th><th scope="col">Disk</th><th scope="col">Last seen</th></tr>
                   </thead>
                   <tbody>
                     {servers.map((r) => (
                       <tr key={r.id}>
-                        <td><span className={`dot ${r.status}`} title={r.status} /></td>
-                        <td><Link href={`/servers/${r.id}`} style={{ color: 'var(--accent)', textDecoration: 'none' }}>{r.name}</Link></td>
+                        <td>
+                          <span className="overview-server-status">
+                            <span className={`dot ${r.status}`} aria-hidden="true" />
+                            <span>{r.status || 'unknown'}</span>
+                          </span>
+                        </td>
+                        <td><Link href={`/servers/${r.id}`} className="overview-server-link focus-ring" title={r.name}>{r.name}</Link></td>
                         <td>
                           {editingEnv === r.id ? (
                             <EnvEditor serverId={r.id} currentEnv={getEnv(r)} onSaved={(val) => { updateRowEnv(r.id, val); setEditingEnv(null); }} />
                           ) : (
-                            <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
+                            <span className="overview-editable-cell">
                               <EnvTag env={getEnv(r)} />
-                              <button onClick={() => setEditingEnv(r.id)}
-                                style={{ fontSize: '10px', padding: '1px 5px', cursor: 'pointer', borderRadius: '3px',
-                                  background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)' }}>✎</button>
+                              <button type="button" onClick={() => setEditingEnv(r.id)}
+                                className="btn-secondary overview-edit-button" aria-label={`Edit environment for ${r.name}`}>Edit</button>
                             </span>
                           )}
                         </td>
@@ -284,35 +293,104 @@ export default function OverviewPage() {
                             <ProductEditor serverId={r.id} currentProductId={r.product_id} products={products}
                               onSaved={(pid, pname) => { updateRowProduct(r.id, pid, pname); setEditingProduct(null); }} />
                           ) : (
-                            <span style={{ display: 'inline-flex', gap: '6px', alignItems: 'center' }}>
-                              <span style={{ fontSize: '12px', color: r.product_name ? 'var(--fg)' : 'var(--muted)' }}>
+                            <span className="overview-editable-cell">
+                              <span className={`overview-product-name${r.product_name ? '' : ' muted'}`} title={r.product_name || 'Unassigned'}>
                                 {r.product_name || '—'}
                               </span>
-                              <button onClick={() => setEditingProduct(r.id)}
-                                style={{ fontSize: '10px', padding: '1px 5px', cursor: 'pointer', borderRadius: '3px',
-                                  background: 'transparent', border: '1px solid var(--border)', color: 'var(--muted)' }}>✎</button>
+                              <button type="button" onClick={() => setEditingProduct(r.id)}
+                                className="btn-secondary overview-edit-button" aria-label={`Edit product for ${r.name}`}>Edit</button>
                             </span>
                           )}
                         </td>
                         <td>{bar(r.cpu_usage)}</td>
                         <td>{bar(r.memory_usage)}</td>
                         <td>{bar(r.disk_usage)}</td>
-                        <td style={{ fontSize: '12px', color: 'var(--muted)' }}>{r.last_seen ? new Date(r.last_seen).toLocaleTimeString() : '—'}</td>
+                        <td className="overview-last-seen">{r.last_seen ? new Date(r.last_seen).toLocaleTimeString() : '—'}</td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          </section>
         );
       })}
 
       {groups.length === 0 && (
-        <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '10px', padding: '24px', textAlign: 'center', color: 'var(--muted)' }}>
-          No servers match the filter.
+        <div className="overview-card overview-empty" role="status">
+          <strong>{rows.length === 0 ? 'No servers configured' : 'No servers match the filter'}</strong>
+          <p>{rows.length === 0
+            ? 'Add a server to start monitoring it here.'
+            : `No servers are tagged with the ${envFilter} environment. Select All to see every server.`}</p>
+          {rows.length === 0 ? (
+            <button type="button" className="btn-primary" onClick={() => setShowReg(true)}>Add server</button>
+          ) : (
+            <button type="button" className="btn-secondary" onClick={() => setEnvFilter('')}>Show all servers</button>
+          )}
         </div>
       )}
+      <style jsx global>{`
+        .overview-page .overview-metrics { align-items: start; }
+        .overview-page .overview-metric { border-color: transparent; }
+        .overview-page .overview-metric-label { margin: 0; line-height: 1.4; }
+        .overview-page .overview-metric-value { color: var(--accent); }
+        .overview-page .overview-metric-value.is-online { color: var(--ok); }
+        .overview-page .overview-metric-value.is-offline { color: var(--crit); }
+        .overview-page .overview-metric-value.is-live { color: ${ENV_COLORS.live}; }
+        .overview-page .overview-metric-value.is-staging { color: ${ENV_COLORS.staging}; }
+        .overview-page .overview-metric-value.is-cpu { color: var(--warn); }
+        .overview-page .overview-filter { align-items: center; }
+        .overview-page .overview-filter-label { color: var(--muted); font-size: 13px; font-weight: 600; }
+        .overview-page .overview-filter-options { display: flex; flex-wrap: wrap; gap: 6px; }
+        .overview-page .overview-filter-button {
+          padding: 6px 12px; background: transparent; color: var(--text);
+          border: 1px solid var(--border); font-size: 12px;
+        }
+        .overview-page .overview-filter-button:hover { background: var(--panel-2); filter: none; }
+        .overview-page .overview-filter-button.is-selected {
+          background: var(--accent); color: var(--accent-foreground); border-color: var(--accent);
+        }
+        .overview-page .overview-group-heading { margin: 0; font-size: 14px; }
+        .overview-page .overview-group-toggle {
+          width: 100%; border-radius: 0; background: var(--panel-2); color: var(--text); text-align: left;
+        }
+        .overview-page .overview-group-toggle[aria-expanded="false"] { border-bottom-color: transparent; }
+        .overview-page .overview-group-toggle:hover { background: var(--surface-raised); filter: none; }
+        .overview-page .overview-group-toggle:focus-visible,
+        .overview-page .overview-table-wrap:focus-visible { outline-offset: -3px; }
+        .overview-page .overview-group-title { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
+        .overview-page .overview-group-chevron { flex: 0 0 16px; color: var(--muted); }
+        .overview-page .overview-group-count { flex-shrink: 0; color: var(--muted); font-size: 12px; font-weight: 400; }
+        .overview-page .overview-server-table { margin: 0; border-radius: 0; }
+        .overview-page .overview-server-table thead { background: var(--panel-2); }
+        .overview-page .overview-server-table td { vertical-align: middle; font-variant-numeric: tabular-nums; }
+        .overview-page .overview-server-table tbody tr:last-child td { border-bottom: 0; }
+        .overview-page .overview-server-table tbody tr:hover { background: var(--surface-raised); }
+        .overview-page .overview-server-status { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; text-transform: capitalize; white-space: nowrap; }
+        .overview-page .overview-server-status .dot { flex: 0 0 8px; width: 8px; height: 8px; box-shadow: none; }
+        .overview-page .overview-server-link { display: block; width: max-content; max-width: 240px; overflow-wrap: anywhere; font-weight: 600; }
+        .overview-page .overview-server-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+        .overview-page .overview-editable-cell,
+        .overview-page .overview-inline-editor { display: inline-flex; align-items: center; gap: 8px; }
+        .overview-page .overview-edit-button,
+        .overview-page .overview-save-button { flex-shrink: 0; padding: 5px 8px; font-size: 12px; }
+        .overview-page .overview-editor-select { width: 150px; font-size: 12px; }
+        .overview-page .overview-product-name { max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+        .overview-page .overview-env-tag {
+          display: inline-block; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+          padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase;
+          color: var(--env-color); background: var(--env-background); border: 1px solid var(--env-border);
+        }
+        .overview-page .overview-server-table .overview-last-seen { font-size: 12px; color: var(--muted); white-space: nowrap; }
+        .overview-page .meter { display: flex; align-items: center; gap: 8px; width: 100px; background: transparent; overflow: visible; }
+        .overview-page .overview-meter-track { width: 55px; height: 5px; flex-shrink: 0; border-radius: 5px; background: var(--panel-2); overflow: hidden; }
+        .overview-page .meter-fill { border-radius: inherit; }
+        .overview-page .meter span { position: static; margin-left: auto; color: var(--text); font-variant-numeric: tabular-nums; }
+        @media (max-width: 760px) {
+          .overview-page .overview-group-toggle { align-items: flex-start; flex-direction: column; gap: 6px; }
+          .overview-page .overview-group-count { padding-left: 24px; }
+        }
+      `}</style>
     </div>
   );
 }
