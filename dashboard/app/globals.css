@@ -386,3 +386,37 @@ label input { margin-top: 4px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+/* Shared page context. Scoped to the new primitives; existing pages opt in. */
+.page-header { width: 100%; max-width: 1200px; min-width: 0; margin: 0 auto 28px; }
+.page-header--wide { max-width: none; }
+.page-header-context { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 16px; min-width: 0; }
+.page-header-workspace { color: var(--text-subtle); font-size: .8125rem; font-weight: 600; overflow-wrap: anywhere; }
+.breadcrumbs { min-width: 0; max-width: 100%; font-size: .8125rem; line-height: 1.5; }
+.breadcrumbs ol { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; list-style: none; margin: 0; padding: 0; }
+.breadcrumbs li { display: inline-flex; align-items: baseline; gap: 10px; min-width: 0; max-width: 100%; color: var(--muted); overflow-wrap: anywhere; }
+.breadcrumbs li + li::before { content: ''; width: 5px; height: 5px; flex: 0 0 5px; border-top: 1px solid var(--muted); border-right: 1px solid var(--muted); transform: rotate(45deg); align-self: center; }
+.breadcrumbs a, .breadcrumbs span { min-width: 0; }
+.breadcrumbs a { color: var(--text-subtle); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; border-radius: 2px; }
+.breadcrumbs a:hover { color: var(--accent); }
+.breadcrumbs a:focus-visible, .page-header-actions a:focus-visible, .section-header-actions a:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.breadcrumbs [aria-current="page"] { color: var(--text); }
+.page-header-row, .section-header { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 16px 24px; min-width: 0; }
+.page-header-copy { flex: 1 1 360px; min-width: 0; }
+.page-header h1 { margin: 0; color: var(--text); font-size: 2rem; font-weight: 700; line-height: 1.2; letter-spacing: -.025em; text-wrap: balance; overflow-wrap: anywhere; }
+.page-header-description, .section-header-description { max-width: 70ch; color: var(--muted); line-height: 1.6; overflow-wrap: anywhere; }
+.page-header-description { margin: 8px 0 0; font-size: .9375rem; }
+.page-header-actions, .section-header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; min-width: 0; max-width: 100%; }
+.page-header-actions > *, .section-header-actions > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.section-header { margin-block: 28px 14px; gap: 12px 20px; }
+.section-header-copy { flex: 1 1 280px; min-width: 0; }
+.section-header h2 { margin: 0; color: var(--text); font-size: 1.125rem; font-weight: 600; line-height: 1.4; letter-spacing: -.01em; text-wrap: balance; overflow-wrap: anywhere; scroll-margin-top: 24px; }
+.section-header-description { margin: 4px 0 0; font-size: .875rem; }
+@media (max-width: 760px) {
+  .page-header { margin-bottom: 24px; }
+  .page-header h1 { font-size: 1.75rem; }
+  .page-header-context { margin-bottom: 12px; gap: 6px 12px; }
+  .page-header-copy, .section-header-copy { flex-basis: 100%; }
+  .page-header-actions, .section-header-actions { width: 100%; justify-content: flex-start; }
+  .section-header { margin-top: 24px; }
+}
