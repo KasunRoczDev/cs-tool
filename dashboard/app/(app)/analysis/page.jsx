@@ -1,5 +1,13 @@
 'use client';
+import PageHeader from '@/components/PageHeader';
+import SectionHeader from '@/components/SectionHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import MetricCard from '@/components/ui/MetricCard';
+import StatusBadge from '@/components/ui/StatusBadge';
+import FilterBar from '@/components/ui/FilterBar';
+import Icon from '@/components/Icon';
 import { useEffect, useState, useCallback } from 'react';
+import { getPageContext } from '@/lib/navigation';
 import { api } from '@/lib/api';
 
 // ── Severity helpers ──────────────────────────────────────────────────────
@@ -10,13 +18,7 @@ const SEV = {
   low:      { color: '#34d399', bg: '#34d39920', border: '#34d399' },
 };
 
-const CAT_ICON = {
-  authentication: '🔑',
-  webserver:      '🌐',
-  firewall:       '🧱',
-  system:         '⚙️',
-  exposure:       '📡',
-};
+const CAT_ICON = { authentication: 'access', webserver: 'topology', firewall: 'security', system: 'settings', exposure: 'monitoring' };
 
 const CAT_LABEL = {
   authentication: 'Authentication',
@@ -70,7 +72,7 @@ function PostureSummary({ finding_counts }) {
     { sev: 'low',      label: 'Low' },
   ];
   return (
-    <div style={{ display: 'flex', gap: 10 }}>
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
       {bars.map(({ sev, label }) => {
         const count = finding_counts?.[sev] ?? 0;
         const s = SEV[sev];
@@ -107,29 +109,25 @@ function FindingCard({ finding }) {
   return (
     <div style={{
       border: `1px solid ${s.border}40`,
-      borderLeft: `4px solid ${s.border}`,
+
       borderRadius: 8,
       marginBottom: 10,
       background: 'var(--panel)',
       overflow: 'hidden',
     }}>
       {/* Header */}
-      <div
+      <button type="button" aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', cursor: 'pointer', userSelect: 'none' }}>
-        <span style={{
-          padding: '2px 8px', borderRadius: 12, fontSize: 10, fontWeight: 700,
-          background: s.bg, color: s.color, border: `1px solid ${s.border}`,
-          textTransform: 'uppercase', flexShrink: 0,
-        }}>{finding.severity}</span>
+        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', cursor: 'pointer', userSelect: 'none', width: '100%', textAlign: 'left', flexWrap: 'wrap', color: 'var(--text)', background: 'var(--panel)', border: 0 }}>
+        <StatusBadge status={finding.severity === 'high' || finding.severity === 'medium' ? 'warning' : finding.severity}>{finding.severity}</StatusBadge>
         <span style={{ fontWeight: 600, fontSize: 14, flex: 1 }}>
-          {CAT_ICON[finding.category] || '🔍'} {finding.title}
+          <Icon name={CAT_ICON[finding.category] || 'search'} /> {finding.title}
         </span>
         <span style={{ fontSize: 12, color: 'var(--muted)', flexShrink: 0 }}>
           {finding.count > 1 ? `${finding.count} events` : ''}
         </span>
-        <span style={{ color: 'var(--muted)', fontSize: 16 }}>{open ? '▲' : '▼'}</span>
-      </div>
+        <Icon name="chevron" />
+      </button>
 
       {open && (
         <div style={{ padding: '0 16px 16px' }}>
@@ -194,7 +192,7 @@ function FindingCard({ finding }) {
                             color: copied === i ? '#34d399' : '#8b949e',
                             cursor: 'pointer', fontSize: 11,
                           }}>
-                          {copied === i ? '✓ Copied' : 'Copy'}
+                          {copied === i ? 'Copied' : 'Copy'}
                         </button>
                       </div>
                     )}
@@ -206,7 +204,7 @@ function FindingCard({ finding }) {
 
           {/* Timestamps */}
           {(finding.first_seen || finding.last_seen) && (
-            <div style={{ marginTop: 10, fontSize: 11, color: 'var(--muted)', display: 'flex', gap: 16 }}>
+            <div style={{ marginTop: 10, fontSize: 11, color: 'var(--muted)', display: 'flex', flexWrap: 'wrap', gap: 16 }}>
               {finding.first_seen && <span>First seen: {new Date(finding.first_seen).toLocaleString()}</span>}
               {finding.last_seen  && <span>Last seen: {new Date(finding.last_seen).toLocaleString()}</span>}
             </div>
@@ -222,13 +220,7 @@ function CategorySection({ category, findings }) {
   if (!findings.length) return null;
   return (
     <div style={{ marginBottom: 24 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--muted)', textTransform: 'uppercase',
-        letterSpacing: '0.06em', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-        <span>{CAT_ICON[category]}</span>
-        <span>{CAT_LABEL[category]}</span>
-        <span style={{ background: 'var(--panel-2)', border: '1px solid var(--border)',
-          borderRadius: 10, padding: '1px 7px', fontSize: 11, fontWeight: 600 }}>{findings.length}</span>
-      </div>
+      <SectionHeader title={`${CAT_LABEL[category]} (${findings.length})`} />
       {findings.map((f) => <FindingCard key={f.id} finding={f} />)}
     </div>
   );
@@ -241,11 +233,11 @@ function ServerPostureCard({ posture, onClick, active }) {
   const scoreColor = posture.score >= 75 ? '#34d399' : posture.score >= 50 ? '#fbbf24' :
                      posture.score >= 25 ? '#fb923c' : '#f87171';
   return (
-    <div onClick={onClick} style={{
+    <button type="button" aria-pressed={active} onClick={onClick} style={{ width: '100%', textAlign: 'left', color: 'var(--text)',
       padding: '14px 16px', borderRadius: 8, cursor: 'pointer',
-      background: active ? 'var(--accent)15' : 'var(--panel)',
+      background: active ? 'var(--panel-2)' : 'var(--panel)',
       border: `2px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
-      transition: 'all .15s',
+
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
         <span style={{ fontWeight: 700, fontSize: 14 }}>{posture.server_name}</span>
@@ -266,10 +258,10 @@ function ServerPostureCard({ posture, onClick, active }) {
           );
         })}
         {!Object.values(posture.finding_counts || {}).some(Boolean) && (
-          <span style={{ color: '#34d399', fontWeight: 600 }}>✓ No issues found</span>
+          <span style={{ color: '#34d399', fontWeight: 600 }}>No issues found</span>
         )}
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -278,7 +270,7 @@ export default function AnalysisPage() {
   const [postureList, setPostureList] = useState([]);
   const [selected, setSelected]   = useState(null);
   const [window, setWindow]        = useState(24);
-  const [loading, setLoading]      = useState(false);
+  const [loading, setLoading]      = useState(true);
   const [error, setError]          = useState('');
 
   const load = useCallback(async (w) => {
@@ -311,16 +303,13 @@ export default function AnalysisPage() {
   };
 
   return (
-    <div>
+    <div style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }}>
       {/* Page header */}
-      <div className="page-head" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-        <div>
-          <h2 style={{ margin: 0 }}>Security Analysis & Fix Suggestions</h2>
-          <span className="muted">Analysed from collected security events — all findings include remediation steps</span>
-        </div>
+      <PageHeader {...getPageContext('/analysis')} wide />
+      <FilterBar label="Analysis time window">
         <div style={{ display: 'flex', gap: 6 }}>
           {WINDOW_OPTIONS.map((o) => (
-            <button key={o.value} onClick={() => setWindow(o.value)}
+            <button key={o.value} aria-pressed={window === o.value} onClick={() => setWindow(o.value)}
               style={{
                 padding: '6px 14px', borderRadius: 7, fontSize: 12, cursor: 'pointer',
                 border: `1px solid ${window === o.value ? 'var(--accent)' : 'var(--border)'}`,
@@ -334,23 +323,16 @@ export default function AnalysisPage() {
               padding: '6px 14px', borderRadius: 7, fontSize: 12, cursor: 'pointer',
               border: '1px solid var(--border)', background: 'var(--panel-2)',
               color: 'var(--fg, var(--text))',
-            }}>{loading ? '⟳' : '↺ Refresh'}</button>
+            }}>{loading ? 'Refreshing…' : 'Refresh'}</button>
         </div>
-      </div>
+      </FilterBar>
 
-      {error && (
-        <div style={{
-          padding: '12px 16px', borderRadius: 8, marginBottom: 16,
-          background: '#fee2e222', border: '1px solid #f87171', color: '#f87171', fontSize: 13,
-        }}>{error}</div>
-      )}
-
-      {loading && !postureList.length ? (
-        <div style={{ textAlign: 'center', padding: 60, color: 'var(--muted)', fontSize: 14 }}>
-          Analysing security data…
-        </div>
-      ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 20, alignItems: 'start' }}>
+      {error && <FeedbackState kind="error" description={error} action={<button onClick={() => load(window)} disabled={loading}>Retry</button>} />}
+      {loading && <FeedbackState kind="loading" title="Analysing security data…" />}
+      {!loading && !error && postureList.length === 0 && <FeedbackState title="No servers found" description="Add servers to collect security analysis." />}
+      <div aria-busy={loading}>
+      {!loading && !error && postureList.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 20, alignItems: 'start' }}>
 
           {/* Left: server list */}
           <div>
@@ -383,10 +365,10 @@ export default function AnalysisPage() {
                 }}>
                   <ScoreGauge score={activePosture.score} grade={activePosture.grade} />
                   <div style={{ flex: 1, minWidth: 200 }}>
-                    <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>{activePosture.server_name}</div>
+                    <SectionHeader title={activePosture.server_name} />
                     <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 14 }}>
                       {activePosture.findings.length === 0
-                        ? '✅ No security issues found in the selected window'
+                        ? 'No security issues found in the selected window'
                         : `${activePosture.findings.length} issue${activePosture.findings.length > 1 ? 's' : ''} found — fix prioritised by severity`}
                     </div>
                     <PostureSummary finding_counts={activePosture.finding_counts} />
@@ -402,7 +384,7 @@ export default function AnalysisPage() {
                     padding: 32, textAlign: 'center', background: 'var(--panel)',
                     border: '1px solid #34d39940', borderRadius: 10, color: '#34d399',
                   }}>
-                    <div style={{ fontSize: 40, marginBottom: 10 }}>✅</div>
+                    <Icon name="security" size={32} />
                     <div style={{ fontWeight: 700, fontSize: 16, marginBottom: 4 }}>No issues detected</div>
                     <div style={{ fontSize: 13, color: 'var(--muted)' }}>
                       No security findings in the last {window}h. Keep monitoring — the analysis refreshes on demand.
@@ -427,6 +409,7 @@ export default function AnalysisPage() {
         </div>
       )}
 
+      </div>
       {/* Legend */}
       <div style={{
         marginTop: 24, padding: '12px 16px', borderRadius: 8,

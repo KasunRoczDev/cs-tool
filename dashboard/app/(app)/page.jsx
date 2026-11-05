@@ -1,6 +1,13 @@
 'use client';
+import PageHeader from '@/components/PageHeader';
+import MetricCard from '@/components/ui/MetricCard';
+import FeedbackState from '@/components/ui/FeedbackState';
+import EnvironmentBadge from '@/components/ui/EnvironmentBadge';
+import StatusBadge from '@/components/ui/StatusBadge';
+import FilterBar from '@/components/ui/FilterBar';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { getPageContext } from '@/lib/navigation';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 import RegisterServer from '@/components/RegisterServer';
@@ -9,22 +16,20 @@ const ENV_OPTIONS = ['live', 'staging', 'dev', 'test'];
 const UNASSIGNED = '— Unassigned —';
 
 function EnvTag({ env }) {
-  if (!env) return null;
-  return (
-    <span className={`overview-env-tag overview-env-${ENV_OPTIONS.includes(env) ? env : 'unknown'}`}>{env}</span>
-  );
+  return <EnvironmentBadge environment={env} />;
 }
 
 function EnvEditor({ serverId, currentEnv, onSaved }) {
   const [val, setVal] = useState(currentEnv || '');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   const save = async () => {
-    setSaving(true);
+    setSaving(true); setError('');
     try {
       await api.updateServer(serverId, { tags: { env: val } });
       onSaved(val);
-    } catch {}
+    } catch (e) { setError(e.message || 'Unable to save changes'); }
     setSaving(false);
   };
 
@@ -38,6 +43,7 @@ function EnvEditor({ serverId, currentEnv, onSaved }) {
       <button type="button" onClick={save} disabled={saving} className="btn-primary overview-save-button">
         {saving ? 'Saving…' : 'Save'}
       </button>
+      {error && <span role="alert">{error}</span>}
     </span>
   );
 }
@@ -45,14 +51,15 @@ function EnvEditor({ serverId, currentEnv, onSaved }) {
 function ProductEditor({ serverId, currentProductId, products, onSaved }) {
   const [val, setVal] = useState(currentProductId || '');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
 
   const save = async () => {
-    setSaving(true);
+    setSaving(true); setError('');
     try {
       await api.updateServer(serverId, { product_id: val });
       const name = products.find((p) => p.id === val)?.name || '';
       onSaved(val, name);
-    } catch {}
+    } catch (e) { setError(e.message || 'Unable to save changes'); }
     setSaving(false);
   };
 
@@ -66,6 +73,7 @@ function ProductEditor({ serverId, currentProductId, products, onSaved }) {
       <button type="button" onClick={save} disabled={saving} className="btn-primary overview-save-button">
         {saving ? 'Saving…' : 'Save'}
       </button>
+      {error && <span role="alert">{error}</span>}
     </span>
   );
 }
@@ -186,73 +194,26 @@ export default function OverviewPage() {
 
   return (
     <div className="overview-page">
-      <header className="page-head overview-header">
-        <div>
-          <h1>Server Overview</h1>
-          <p>Server health and resource usage across products and environments.</p>
-        </div>
-        <div className="overview-actions">
-          <button type="button" className="btn-primary" onClick={() => setShowReg(true)}>Add server</button>
-        </div>
-      </header>
+      <PageHeader {...getPageContext('/')} actions={<button type="button" className="btn-primary" onClick={() => setShowReg(true)}>Add server</button>} wide />
       {showReg && <RegisterServer onClose={() => { setShowReg(false); load(); }} />}
 
-      {loadError && (
-        <div className="overview-card overview-load-error" role="alert">
-          <div>
-            <strong>{hasLoaded ? 'Unable to refresh overview' : 'Unable to load overview'}</strong>
-            <p>{loadError}{hasLoaded && ' Previously loaded data remains available.'}</p>
-          </div>
-          <button type="button" className="btn-secondary" onClick={load} disabled={loadStatus === 'loading'}>Retry</button>
-        </div>
-      )}
+      {loadError && <FeedbackState kind="error" title={hasLoaded ? 'Unable to refresh overview' : 'Unable to load overview'} description={loadError} action={<button className="btn-secondary" onClick={load} disabled={loadStatus === 'loading'}>Retry</button>} />}
+      {loadStatus === 'loading' && <FeedbackState kind="loading" title={hasLoaded ? 'Refreshing overview…' : 'Loading servers…'} />}
 
       {/* Summary Cards */}
       <section className="overview-metrics" aria-label="Server summary" aria-busy={loadStatus === 'loading'}>
-        <div className="overview-metric">
-          <h2 className="overview-metric-label">Total Servers</h2>
-          <div className="overview-metric-value">{hasLoaded ? rows.length : '—'}</div>
-          <div className="overview-metric-meta">Monitoring</div>
-        </div>
-        <div className="overview-metric">
-          <h2 className="overview-metric-label">Products</h2>
-          <div className="overview-metric-value">{hasLoaded ? products.length : '—'}</div>
-          <div className="overview-metric-meta">Tracked products</div>
-        </div>
-        <div className="overview-metric">
-          <h2 className="overview-metric-label">Online</h2>
-          <div className="overview-metric-value is-online">{hasLoaded ? onlineCount : '—'}</div>
-          <div className="overview-metric-meta">{hasLoaded ? `${rows.length > 0 ? ((onlineCount / rows.length) * 100).toFixed(0) : 0}% available` : 'Awaiting data'}</div>
-        </div>
-        <div className="overview-metric">
-          <h2 className="overview-metric-label">Offline</h2>
-          <div className="overview-metric-value is-offline">{hasLoaded ? offlineCount : '—'}</div>
-          <div className="overview-metric-meta">Needs attention</div>
-        </div>
-        <div className="overview-metric">
-          <h2 className="overview-metric-label">Live</h2>
-          <div className="overview-metric-value is-live">{hasLoaded ? liveCount : '—'}</div>
-          <div className="overview-metric-meta">Production servers</div>
-        </div>
-        <div className="overview-metric">
-          <h2 className="overview-metric-label">Staging</h2>
-          <div className="overview-metric-value is-staging">{hasLoaded ? stagingCount : '—'}</div>
-          <div className="overview-metric-meta">Pre-prod servers</div>
-        </div>
-        <div className="overview-metric">
-          <h2 className="overview-metric-label">Avg CPU</h2>
-          <div className="overview-metric-value is-cpu">{hasLoaded ? `${avgCpu}%` : '—'}</div>
-          <div className="overview-metric-meta">Average load</div>
-        </div>
-        <div className="overview-metric">
-          <h2 className="overview-metric-label">Avg Memory</h2>
-          <div className="overview-metric-value">{hasLoaded ? `${avgMemory}%` : '—'}</div>
-          <div className="overview-metric-meta">Average usage</div>
-        </div>
+        <MetricCard label="Total servers" value={hasLoaded ? rows.length : null} detail="Monitoring" tone="neutral" />
+        <MetricCard label="Products" value={hasLoaded ? products.length : null} detail="Tracked products" tone="neutral" />
+        <MetricCard label="Online" value={hasLoaded ? onlineCount : null} detail="Available servers" tone="positive" />
+        <MetricCard label="Offline" value={hasLoaded ? offlineCount : null} detail="Needs attention" tone="critical" />
+        <MetricCard label="Live" value={hasLoaded ? liveCount : null} detail="Production servers" tone="neutral" />
+        <MetricCard label="Staging" value={hasLoaded ? stagingCount : null} detail="Pre-production servers" tone="neutral" />
+        <MetricCard label="Average CPU" value={hasLoaded ? `${avgCpu}%` : null} detail="Average load" tone="neutral" />
+        <MetricCard label="Average memory" value={hasLoaded ? `${avgMemory}%` : null} detail="Average usage" tone="neutral" />
       </section>
 
       {/* Filter by env */}
-      <div className="overview-filter overview-section" role="group" aria-labelledby="overview-environment-label">
+      <FilterBar label="Environment filter">
         <span id="overview-environment-label" className="overview-filter-label">Environment</span>
         <div className="overview-filter-options">
         {['', ...ENV_OPTIONS].map((e) => (
@@ -263,7 +224,7 @@ export default function OverviewPage() {
           </button>
         ))}
         </div>
-      </div>
+      </FilterBar>
 
       {/* One section per product */}
       {groups.map(([productName, servers]) => {
@@ -301,10 +262,7 @@ export default function OverviewPage() {
                     {servers.map((r) => (
                       <tr key={r.id}>
                         <td>
-                          <span className="overview-server-status">
-                            <span className={`dot ${r.status}`} aria-hidden="true" />
-                            <span>{r.status || 'unknown'}</span>
-                          </span>
+                          <StatusBadge status={r.status} />
                         </td>
                         <td><Link href={`/servers/${r.id}`} className="overview-server-link focus-ring" title={r.name}>{r.name}</Link></td>
                         <td>
@@ -346,14 +304,7 @@ export default function OverviewPage() {
         );
       })}
 
-      {!hasLoaded && loadStatus === 'loading' && (
-        <div className="overview-card overview-empty" role="status">
-          <strong>Loading servers…</strong>
-          <p>Fetching server health and resource usage.</p>
-        </div>
-      )}
-
-      {hasLoaded && groups.length === 0 && (rows.length > 0 || loadStatus === 'success') && (
+      {hasLoaded && loadStatus === 'success' && groups.length === 0 && (
         <div className="overview-card overview-empty" role="status">
           <strong>{rows.length === 0 ? 'No servers configured' : 'No servers match the filter'}</strong>
           <p>{rows.length === 0

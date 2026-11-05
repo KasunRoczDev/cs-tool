@@ -1,9 +1,18 @@
 'use client';
+import PageHeader from '@/components/PageHeader';
+import SectionHeader from '@/components/SectionHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import MetricCard from '@/components/ui/MetricCard';
+import EnvironmentBadge from '@/components/ui/EnvironmentBadge';
+import StatusBadge from '@/components/ui/StatusBadge';
+import FilterBar from '@/components/ui/FilterBar';
+import FormField from '@/components/ui/FormField';
 import { useEffect, useState, useCallback } from 'react';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
   BarChart, Bar,
 } from 'recharts';
+import { getPageContext } from '@/lib/navigation';
 import { api } from '@/lib/api';
 
 const RANGES = [
@@ -24,23 +33,9 @@ const COLORS = ['#4f9dff','#34d399','#fbbf24','#f87171','#a78bfa','#fb923c','#60
 
 const ENV_COLORS = { live: '#34d399', staging: '#fbbf24', dev: '#60a5fa', test: '#a78bfa' };
 
-function EnvTag({ env }) {
-  if (!env) return <span style={{ color: 'var(--muted)', fontSize: '11px' }}>—</span>;
-  const color = ENV_COLORS[env] || '#888';
-  return (
-    <span style={{ padding: '2px 7px', borderRadius: '10px', fontSize: '11px', fontWeight: 600,
-      background: color + '22', color, border: `1px solid ${color}55`, textTransform: 'uppercase' }}>{env}</span>
-  );
-}
+function EnvTag({ env }) { return <EnvironmentBadge environment={env} />; }
 
-function StatCard({ label, value, unit = '%', color }) {
-  return (
-    <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '8px', padding: '14px 18px' }}>
-      <div style={{ fontSize: '12px', color: 'var(--muted)', marginBottom: '4px' }}>{label}</div>
-      <div style={{ fontSize: '24px', fontWeight: 700, color: color || 'var(--fg)' }}>{value}{unit}</div>
-    </div>
-  );
-}
+function StatCard({ label, value, unit = '%' }) { return <MetricCard label={label} value={`${value}${unit}`} />; }
 
 export default function PerformancePage() {
   const [servers, setServers] = useState([]);
@@ -50,17 +45,22 @@ export default function PerformancePage() {
   const [envFilter, setEnvFilter] = useState('');
   const [seriesMap, setSeriesMap] = useState({}); // serverId → [{t, value}]
   const [loading, setLoading] = useState(false);
+  const [serversLoading, setServersLoading] = useState(true);
+  const [serversError, setServersError] = useState('');
+  const [error, setError] = useState('');
   const [selectedIds, setSelectedIds] = useState(new Set());
 
   const metaDef = METRICS.find((m) => m.key === metric) || METRICS[0];
 
-  useEffect(() => {
+  const loadServers = () => {
+    setServersLoading(true); setServersError('');
     Promise.all([api.servers(), api.overview()]).then(([srvs, ov]) => {
       setServers(srvs);
       setOverview(ov);
       setSelectedIds(new Set(srvs.map((s) => s.id)));
-    }).catch(() => {});
-  }, []);
+    }).catch((e) => setServersError(e.message || 'Unable to load server snapshots')).finally(() => setServersLoading(false));
+  };
+  useEffect(() => { loadServers(); }, []);
 
   const filteredServers = servers.filter((s) => {
     if (envFilter && s.tags?.env !== envFilter) return false;
@@ -68,8 +68,8 @@ export default function PerformancePage() {
   });
 
   const loadMetrics = useCallback(async () => {
-    if (filteredServers.length === 0) return;
-    setLoading(true);
+    if (filteredServers.length === 0) { setSeriesMap({}); setError(''); setLoading(false); return; }
+    setLoading(true); setError('');
     const from = new Date(Date.now() - rangeMs).toISOString();
     const results = await Promise.allSettled(
       filteredServers.map((s) => api.metrics(s.id, from).then((rows) => ({ id: s.id, rows }))),
@@ -84,6 +84,7 @@ export default function PerformancePage() {
         }));
       }
     }
+    if (results.some((r) => r.status === 'rejected')) setError('Metrics could not be loaded for one or more servers. Available series are shown.');
     setSeriesMap(map);
     setLoading(false);
   }, [filteredServers.map((s) => s.id).join(','), rangeMs, metric]);
@@ -128,38 +129,32 @@ export default function PerformancePage() {
   const envOptions = [...new Set(servers.map((s) => s.tags?.env).filter(Boolean))];
 
   return (
-    <div>
-      <div className="page-head">
-        <h2>Performance Dashboard</h2>
-        <span className="muted">{loading ? 'Loading…' : `${filteredServers.length} servers`}</span>
-      </div>
-
+    <div style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }}>
+      <PageHeader {...getPageContext('/performance')} wide />
+      {serversLoading && <FeedbackState kind="loading" title="Loading servers…" />}
+      {serversError && <FeedbackState kind="error" description={serversError} action={<button onClick={loadServers}>Retry</button>} />}
+      {loading && <FeedbackState kind="loading" title="Loading performance metrics…" />}
+      {error && <FeedbackState kind="error" description={error} action={<button onClick={loadMetrics} disabled={loading}>Retry</button>} />}
+      {!serversLoading && !serversError && filteredServers.length === 0 && <FeedbackState title="No matching servers" description="Choose another environment or add a server from Overview." />}
       {/* Controls */}
-      <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '20px', alignItems: 'center' }}>
-        <div className="filter-field">
-          <label>Metric</label>
-          <select value={metric} onChange={(e) => setMetric(e.target.value)}>
+      <FilterBar label="Performance filters">
+        <FormField label="Metric"><select value={metric} onChange={(e) => setMetric(e.target.value)}>
             {METRICS.map((m) => <option key={m.key} value={m.key}>{m.label}</option>)}
-          </select>
-        </div>
-        <div className="filter-field">
-          <label>Time range</label>
-          <select value={rangeMs} onChange={(e) => setRangeMs(Number(e.target.value))}>
+          </select></FormField>
+        <FormField label="Time range"><select value={rangeMs} onChange={(e) => setRangeMs(Number(e.target.value))}>
             {RANGES.map((r) => <option key={r.label} value={r.ms}>Last {r.label}</option>)}
-          </select>
-        </div>
-        <div className="filter-field">
-          <label>Environment</label>
-          <select value={envFilter} onChange={(e) => setEnvFilter(e.target.value)}>
+          </select></FormField>
+        <FormField label="Environment"><select value={envFilter} onChange={(e) => setEnvFilter(e.target.value)}>
             <option value="">All envs</option>
             {envOptions.map((e) => <option key={e} value={e}>{e}</option>)}
-          </select>
-        </div>
-        <button onClick={loadMetrics} style={{ padding: '6px 14px', borderRadius: '6px',
+          </select></FormField>
+        <button disabled={loading || serversLoading} onClick={loadMetrics} style={{ padding: '6px 14px', borderRadius: '6px',
           background: 'var(--accent)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '13px' }}>
           Refresh
         </button>
-      </div>
+      </FilterBar>
+      <div aria-busy={serversLoading || loading}>
+      {!serversLoading && !serversError && filteredServers.length > 0 && <>
 
       {/* Summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '12px', marginBottom: '20px' }}>
@@ -171,10 +166,10 @@ export default function PerformancePage() {
       {/* Multi-server trend chart */}
       <div className="card" style={{ marginBottom: '20px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-          <h4 style={{ margin: 0 }}>{metaDef.label} — All servers</h4>
+          <SectionHeader title={`${metaDef.label} — All servers`} />
           <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
             {filteredServers.map((s, i) => (
-              <button key={s.id} onClick={() => toggleServer(s.id)}
+              <button key={s.id} aria-pressed={selectedIds.has(s.id)} onClick={() => toggleServer(s.id)}
                 style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '10px', cursor: 'pointer',
                   background: selectedIds.has(s.id) ? COLORS[i % COLORS.length] + '33' : 'transparent',
                   border: `1px solid ${COLORS[i % COLORS.length]}`,
@@ -184,6 +179,7 @@ export default function PerformancePage() {
             ))}
           </div>
         </div>
+        {!loading && !error && chartData.length === 0 && <FeedbackState title="No metrics to display" description="Select servers or choose another time range." />}
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -203,7 +199,7 @@ export default function PerformancePage() {
       </div>
 
       {/* Per-server snapshot table */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '12px', marginBottom: '20px' }}>
         {sorted.map((s, i) => {
           const ov = overviewMap[s.id] || {};
           return (
@@ -213,7 +209,7 @@ export default function PerformancePage() {
                   <div style={{ fontWeight: 600, marginBottom: '4px' }}>{s.name}</div>
                   <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                     <EnvTag env={s.tags?.env} />
-                    <span className={`dot ${ov.status || 'unknown'}`} style={{ display: 'inline-block' }} />
+                    <StatusBadge status={ov.status} />
                   </div>
                 </div>
                 <div style={{ fontSize: '28px', fontWeight: 700, color: COLORS[i % COLORS.length] }}>
@@ -245,7 +241,7 @@ export default function PerformancePage() {
 
       {/* Top servers bar chart */}
       <div className="card">
-        <h4 style={{ marginBottom: '12px' }}>Top servers by {metaDef.label}</h4>
+        <SectionHeader title={`Top servers by ${metaDef.label}`} />
         <ResponsiveContainer width="100%" height={Math.max(200, sorted.length * 36)}>
           <BarChart data={sorted.map((s) => ({ name: s.name, value: s.val ?? 0 }))} layout="vertical">
             <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -256,6 +252,8 @@ export default function PerformancePage() {
             <Bar dataKey="value" name={metaDef.label} fill={metaDef.color} isAnimationActive={false} />
           </BarChart>
         </ResponsiveContainer>
+      </div>
+      </>}
       </div>
     </div>
   );

@@ -1,6 +1,12 @@
 'use client';
+import PageHeader from '@/components/PageHeader';
+import SectionHeader from '@/components/SectionHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import FormField from '@/components/ui/FormField';
+import FilterBar from '@/components/ui/FilterBar';
 import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
+import { getPageContext } from '@/lib/navigation';
 import { api } from '@/lib/api';
 import ServerAppConfigCard from '@/components/ServerAppConfigCard';
 
@@ -15,22 +21,36 @@ export default function AppDetailPage() {
   const [vars, setVars] = useState([]);
   const [form, setForm] = useState({ key: '', value: '', is_secret: false });
   const [err, setErr] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [serversLoading, setServersLoading] = useState(true);
+  const [serversError, setServersError] = useState('');
+  const [varsLoading, setVarsLoading] = useState(false);
+  const [varsError, setVarsError] = useState('');
+  const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
   const notify = (m) => { setMsg(m); setTimeout(() => setMsg(''), 2500); };
 
-  const loadServers = () => api.appServers(id).then(setServers).catch((e) => setErr(e.message));
+  const loadServers = () => {
+    setServersLoading(true); setServersError('');
+    return api.appServers(id).then(setServers).catch((e) => setServersError(e.message || 'Unable to load linked servers')).finally(() => setServersLoading(false));
+  };
+  const loadApp = () => {
+    setLoading(true); setLoadError('');
+    return api.app(id).then(setApp).catch((e) => setLoadError(e.message || 'Unable to load app')).finally(() => setLoading(false));
+  };
 
   useEffect(() => {
     if (!id) return;
-    api.app(id).then(setApp).catch((e) => setErr(e.message));
+    loadApp();
     loadServers();
-    api.servers().then(setAllServers).catch(() => {});
-    api.channels().then(setChannels).catch(() => {});
+    api.servers().then(setAllServers).catch((e) => setErr(e.message || 'Unable to load available servers'));
+    api.channels().then(setChannels).catch((e) => setErr(e.message || 'Unable to load variable scopes'));
   }, [id]);
 
   const guard = async (fn, m) => {
-    setErr(''); setMsg('');
-    try { await fn(); if (m) notify(m); } catch (e) { setErr(e.message); }
+    setErr(''); setMsg(''); setSaving(true);
+    try { await fn(); if (m) notify(m); } catch (e) { setErr(e.message); } finally { setSaving(false); }
   };
 
   const linkServer = () => guard(async () => {
@@ -46,8 +66,10 @@ export default function AppDetailPage() {
     await loadServers();
   }, 'Unlinked');
 
-  const loadVars = (channelId) =>
-    api.appEnvVars(id, channelId === null ? 'none' : channelId).then(setVars).catch((e) => setErr(e.message));
+  const loadVars = (channelId) => {
+    setVarsLoading(true); setVarsError('');
+    return api.appEnvVars(id, channelId === null ? 'none' : channelId).then(setVars).catch((e) => setVarsError(e.message || 'Unable to load variables')).finally(() => setVarsLoading(false));
+  };
   const selectChannel = (ch) => { setSelectedChannel(ch); setErr(''); loadVars(ch.id); };
 
   const saveVar = () => guard(async () => {
@@ -63,34 +85,37 @@ export default function AppDetailPage() {
     await loadVars(selectedChannel.id);
   }, 'Deleted');
 
-  if (!app) return <div>Loading…</div>;
+  if (!app) return <div>
+    <PageHeader {...getPageContext('/apps/[id]')} title={'App details'} breadcrumbs={[{ label: 'Apps', href: '/apps' }, { label: 'App details' }]} wide />
+    {loading && <FeedbackState kind="loading" title="Loading app…" />}
+    {loadError && <FeedbackState kind="error" description={loadError} action={<button onClick={loadApp}>Retry</button>} />}
+    <div aria-busy={loading} />
+  </div>;
 
   const linkedServerIds = new Set(servers.map((s) => s.id));
   const availableServers = allServers.filter((s) => !linkedServerIds.has(s.id));
   const scopes = [{ id: null, name: '— general (no channel) —' }, ...channels];
 
   return (
-    <div>
-      <div className="page-head">
-        <h2>🗂️ {app.name}</h2>
-        <span className="muted">
-          {app.product_name || 'No Enterprise Project'}{app.repository_name ? ` · ${app.repository_name}` : ''}
-        </span>
-      </div>
-      {err && <div className="error">{err}</div>}
-      {msg && <div className="hint">{msg}</div>}
+    <div style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }}>
+      <PageHeader {...getPageContext('/apps/[id]')} title={app.name} description={`${app.product_name || 'No Enterprise Project'}${app.repository_name ? ` · ${app.repository_name}` : ''}`} breadcrumbs={[{ label: 'Apps', href: '/apps' }, { label: app.name }]} wide />
+      {err && <FeedbackState kind="error" title="Unable to complete action" description={err} />}
+      {msg && <p role="status">{msg}</p>}
       {app.description && <p className="hint" style={{ marginBottom: 16 }}>{app.description}</p>}
 
-      <h3>Servers hosting this app</h3>
+      <SectionHeader title="Servers hosting this app" />
+      {serversLoading && <FeedbackState kind="loading" title="Loading linked servers…" />}
+      {serversError && <FeedbackState kind="error" description={serversError} action={<button onClick={loadServers}>Retry</button>} />}
       <div className="inline-form" style={{ marginBottom: 8 }}>
-        <select value={linkServerId} onChange={(e) => setLinkServerId(e.target.value)}>
+        <select aria-label="Server to link" value={linkServerId} onChange={(e) => setLinkServerId(e.target.value)}>
           <option value="">— select server —</option>
           {availableServers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <button onClick={linkServer}>Link server</button>
+        <button disabled={saving || serversLoading || !linkServerId} onClick={linkServer}>{saving ? 'Saving…' : 'Link server'}</button>
       </div>
-      {servers.length === 0 ? (
-        <p className="empty">Not hosted on any server yet.</p>
+      <div aria-busy={serversLoading}>
+      {!serversLoading && !serversError && (servers.length === 0 ? (
+        <FeedbackState title="Not hosted on any server yet" description="Choose a server above to link this app." />
       ) : (
         servers.map((s) => (
           <ServerAppConfigCard
@@ -101,15 +126,16 @@ export default function AppDetailPage() {
             onUnlink={() => unlinkServer(s)}
           />
         ))
-      )}
+      ))}
+      </div>
 
-      <h3 style={{ marginTop: 24 }}>Environment variables</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
+      <SectionHeader title="Environment variables" />
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))', gap: 16, alignItems: 'start' }}>
         <div className="card">
-          <h4 style={{ marginTop: 0 }}>Scope</h4>
+          <h3 style={{ marginTop: 0 }}>Scope</h3>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {scopes.map((c) => (
-              <button key={c.id || 'general'} onClick={() => selectChannel(c)} style={{
+              <button key={c.id || 'general'} disabled={varsLoading} aria-pressed={selectedChannel?.id === c.id} onClick={() => selectChannel(c)} style={{
                 textAlign: 'left', padding: '6px 8px', borderRadius: 6,
                 background: selectedChannel?.id === c.id ? 'var(--panel-2)' : 'transparent',
                 border: '1px solid var(--border)', cursor: 'pointer',
@@ -124,29 +150,33 @@ export default function AppDetailPage() {
           <p className="empty">Select a scope to manage its variables.</p>
         ) : (
           <div>
-            <h4>{selectedChannel.name}</h4>
-            <table className="grid">
-              <thead><tr><th>Key</th><th>Value</th><th></th></tr></thead>
+            <h3>{selectedChannel.name}</h3>
+            {varsLoading && <FeedbackState kind="loading" title="Loading variables…" />}
+            {varsError && <FeedbackState kind="error" description={varsError} action={<button onClick={() => loadVars(selectedChannel.id)}>Retry</button>} />}
+            <div aria-busy={varsLoading}>
+            {!varsLoading && !varsError && <div role="region" aria-label="Environment variables" tabIndex={0} className="focus-ring" style={{ maxWidth: '100%', overflowX: 'auto' }}><table className="grid">
+              <thead><tr><th scope="col">Key</th><th scope="col">Value</th><th scope="col"></th></tr></thead>
               <tbody>
                 {vars.map((v) => (
                   <tr key={v.id}>
                     <td><code>{v.key}</code></td>
                     <td>{v.is_secret ? <span style={{ color: 'var(--muted)' }}>●●●●●●●● (secret)</span> : v.value}</td>
-                    <td><button style={{ background: '#f87171' }} onClick={() => removeVar(v)}>Remove</button></td>
+                    <td><button disabled={saving} className="btn-secondary" onClick={() => removeVar(v)}>Remove</button></td>
                   </tr>
                 ))}
                 {vars.length === 0 && <tr><td colSpan="3" className="empty">No variables set.</td></tr>}
               </tbody>
-            </table>
+            </table></div>}
+            </div>
             <form className="inline-form" style={{ marginTop: 8, flexWrap: 'wrap' }} onSubmit={(e) => { e.preventDefault(); saveVar(); }}>
-              <input placeholder="KEY" value={form.key} onChange={(e) => setForm({ ...form, key: e.target.value })} style={{ width: 160 }} />
-              <input placeholder="value" type={form.is_secret ? 'password' : 'text'} value={form.value}
+              <input aria-label="Variable key" placeholder="KEY" value={form.key} onChange={(e) => setForm({ ...form, key: e.target.value })} style={{ width: 160 }} />
+              <input aria-label="Variable value" placeholder="value" type={form.is_secret ? 'password' : 'text'} value={form.value}
                 onChange={(e) => setForm({ ...form, value: e.target.value })} style={{ width: 200 }} />
               <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 13 }}>
                 <input type="checkbox" checked={form.is_secret} onChange={(e) => setForm({ ...form, is_secret: e.target.checked })} />
                 secret
               </label>
-              <button type="submit">Save</button>
+              <button type="submit" disabled={saving || varsLoading || !form.key || !form.value}>{saving ? 'Saving…' : 'Save'}</button>
             </form>
           </div>
         )}

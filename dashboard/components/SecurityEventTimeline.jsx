@@ -1,9 +1,12 @@
 'use client';
+import SectionHeader from '@/components/SectionHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import StatusBadge from '@/components/ui/StatusBadge';
 
 import { useState, useEffect } from 'react';
 import { useDashboard } from '@/lib/useDashboard';
 
-export default function SecurityEventTimeline({ events = [], loading = false, onLoad = () => {} }) {
+export default function SecurityEventTimeline({ events = [], loading = false, error = '', onLoad = () => {} }) {
   const { widgets, dateRange } = useDashboard();
   const [currentPage, setCurrentPage] = useState(1);
   const [filteredEvents, setFilteredEvents] = useState([]);
@@ -71,9 +74,9 @@ export default function SecurityEventTimeline({ events = [], loading = false, on
   }
 
   return (
-    <div className="timeline-wrapper">
-      <div className="timeline-header">
-        <h3>Security Event Timeline</h3>
+    <div className="timeline-wrapper" style={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+      <div className="timeline-header" style={{ flexWrap: 'wrap' }}>
+        <SectionHeader title="Security event timeline" />
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           <label style={{ margin: 0, display: 'flex', gap: '4px', alignItems: 'center' }}>
             <span style={{ fontSize: '12px', color: 'var(--muted)' }}>Filter:</span>
@@ -91,29 +94,23 @@ export default function SecurityEventTimeline({ events = [], loading = false, on
         </div>
       </div>
 
-      {loading ? (
-        <div style={{ textAlign: 'center', padding: '20px', color: 'var(--muted)' }}>
-          Loading events...
-        </div>
-      ) : filteredEvents.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '20px', color: 'var(--muted)' }}>
-          No events found for the selected date range.
-        </div>
-      ) : (
+      {loading && <FeedbackState kind="loading" title="Loading events…" />}
+      {error && <FeedbackState kind="error" description={error} action={<button onClick={onLoad}>Retry</button>} />}
+      {!loading && !error && filteredEvents.length === 0 && <FeedbackState title="No events in this date range" description="Choose another date range or event type." />}
+      <div aria-busy={loading}>
+      {!loading && !error && filteredEvents.length > 0 && (
         <>
           <div className="timeline">
             {currentEvents.map((event, idx) => (
               <div key={`${event.id || idx}`} className="event-item">
                 <div className="event-time">{formatTime(event.timestamp || event.date)}</div>
                 <div className="event-content">
-                  <span className={`event-type ${getEventBadgeClass(event.type)}`}>
-                    {event.type || 'Log'}
-                  </span>
+                  <StatusBadge status={event.type}>{event.type || 'Log'}</StatusBadge>
                   <div className="event-message">{event.message || event.title || 'No message'}</div>
                   <div className="event-details">
                     {event.source && <span>Source: {event.source}</span>}
                     {event.source && event.severity && ' • '}
-                    {event.severity && <span>Severity: {event.severity}</span>}
+                    {event.severity && <StatusBadge status={event.severity === 'high' || event.severity === 'medium' ? 'warning' : event.severity}>{event.severity}</StatusBadge>}
                   </div>
                 </div>
               </div>
@@ -122,7 +119,7 @@ export default function SecurityEventTimeline({ events = [], loading = false, on
 
           {/* Pagination Controls */}
           {totalPages > 1 && (
-            <div className="pagination">
+            <div className="pagination" style={{ flexWrap: 'wrap' }}>
               <button
                 onClick={() => setCurrentPage(1)}
                 disabled={currentPage === 1}
@@ -151,6 +148,7 @@ export default function SecurityEventTimeline({ events = [], loading = false, on
                   <button
                     key={pageNum}
                     onClick={() => setCurrentPage(pageNum)}
+                    aria-current={currentPage === pageNum ? 'page' : undefined}
                     className={currentPage === pageNum ? 'active' : ''}
                   >
                     {pageNum}
@@ -184,6 +182,7 @@ export default function SecurityEventTimeline({ events = [], loading = false, on
           </div>
         </>
       )}
+      </div>
     </div>
   );
 }

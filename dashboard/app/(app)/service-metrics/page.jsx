@@ -1,5 +1,13 @@
 'use client';
+import PageHeader from '@/components/PageHeader';
+import SectionHeader from '@/components/SectionHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import MetricCard from '@/components/ui/MetricCard';
+import StatusBadge from '@/components/ui/StatusBadge';
+import FilterBar from '@/components/ui/FilterBar';
+import FormField from '@/components/ui/FormField';
 import { useEffect, useMemo, useState, useCallback } from 'react';
+import { getPageContext } from '@/lib/navigation';
 import { api } from '@/lib/api';
 
 // One descriptor per metric. status is computed from `statusKey` (defaults to key);
@@ -62,18 +70,23 @@ export default function ServiceMetricsPage() {
   const [rows, setRows] = useState([]);       // snapshot events, newest first
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
+  const [serversLoading, setServersLoading] = useState(true);
+  const [serversError, setServersError] = useState('');
+  const [loadedServerId, setLoadedServerId] = useState('');
 
-  useEffect(() => {
+  const loadServers = () => {
+    setServersLoading(true); setServersError('');
     api.servers()
       .then((s) => { setServers(s); if (s.length && !serverId) setServerId(s[0].id); })
-      .catch((e) => setErr(e.message));
-  }, []); // eslint-disable-line
+      .catch((e) => setServersError(e.message || 'Unable to load servers')).finally(() => setServersLoading(false));
+  };
+  useEffect(() => { loadServers(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const load = useCallback(() => {
     if (!serverId) return;
     setLoading(true); setErr('');
     api.securityEvents(serverId, 'service_metrics_snapshot')
-      .then((r) => setRows(Array.isArray(r) ? r : []))
+      .then((r) => { setRows(Array.isArray(r) ? r : []); setLoadedServerId(serverId); })
       .catch((e) => setErr(e.message))
       .finally(() => setLoading(false));
   }, [serverId]);
@@ -85,25 +98,24 @@ export default function ServiceMetricsPage() {
   const breaches = latest ? METRICS.filter((m) => statusOf(m, latest) === 'crit' || statusOf(m, latest) === 'warn').length : 0;
 
   return (
-    <div>
-      <div className="page-head">
-        <h2>📊 Service Metrics</h2>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          <select style={{ width: 220 }} value={serverId} onChange={(e) => setServerId(e.target.value)}>
-            {servers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-          <button onClick={load} disabled={loading}>{loading ? '…' : '↻ Refresh'}</button>
-        </div>
-      </div>
+    <div style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }}>
+      <PageHeader {...getPageContext('/service-metrics')} wide />
+      <FilterBar label="Server selection"><FormField label="Server">
+        <select value={serverId} onChange={(e) => { setServerId(e.target.value); setErr(''); }}>
+          {servers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+        </select>
+      </FormField><button onClick={load} disabled={loading || !serverId}>{loading ? 'Refreshing…' : 'Refresh'}</button></FilterBar>
+      {serversLoading && <FeedbackState kind="loading" title="Loading servers…" />}
+      {serversError && <FeedbackState kind="error" description={serversError} action={<button onClick={loadServers}>Retry</button>} />}
+      {!serversLoading && !serversError && servers.length === 0 && <FeedbackState title="No servers available" description="Add a server from Overview to collect telemetry." />}
+      {(loading || (serverId && loadedServerId !== serverId && !err)) && <FeedbackState kind="loading" title="Loading snapshots…" />}
+      {err && <FeedbackState kind="error" description={err} action={<button onClick={load} disabled={loading}>Retry</button>} />}
+      <div aria-busy={loading || serversLoading}>
 
-      {err && <div className="error">{err}</div>}
-
-      {!latest ? (
-        <p className="hint">
-          No <code>service_metrics_snapshot</code> received for this server yet. Enable{' '}
+      {loadedServerId === serverId && serverId && !err && !loading && (!latest ? (
+        <FeedbackState title="No service snapshots yet" description={<>No <code>service_metrics_snapshot</code> received for this server yet. Enable{' '}
           <code>service_metrics</code> in the agent config (see <code>agent.example.yaml</code>) — the
-          agent ships these on the snapshot interval.
-        </p>
+          agent ships these on the snapshot interval.</>} />
       ) : (
         <>
           <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 16, flexWrap: 'wrap' }}>
@@ -115,28 +127,16 @@ export default function ServiceMetricsPage() {
             </span>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(250px, 1fr))', gap: 14 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 250px), 1fr))', gap: 14 }}>
             {METRICS.map((m) => {
               const st = statusOf(m, latest);
               const color = COLOR[st];
               const series = history.map((r) => r.raw?.[m.key]);
               return (
-                <div key={m.key} style={{
-                  background: 'var(--panel)', border: '1px solid var(--border)',
-                  borderLeft: `4px solid ${color}`, borderRadius: 10, padding: '14px 16px',
-                }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>{m.label}</span>
-                    <span style={{ width: 9, height: 9, borderRadius: '50%', background: color, display: 'inline-block' }} />
-                  </div>
-                  <div style={{ fontSize: 24, fontWeight: 700, marginTop: 6, color: st === 'none' ? 'var(--muted)' : 'var(--text)' }}>
-                    {fmt(m, latest)}
-                  </div>
-                  <div style={{ fontSize: 11, color: 'var(--muted)', minHeight: 14 }}>
-                    {m.sub?.(latest) || (st === 'none' ? 'not reported' : `warn ≥ ${m.invert ? '≤' : ''}${m.warn} · crit ${m.invert ? '≤' : '≥'}${m.crit}`)}
-                  </div>
-                  <Spark values={series} color={color === COLOR.none ? 'var(--border)' : color} />
-                </div>
+                <MetricCard key={m.key} label={m.label} value={fmt(m, latest)}
+                  tone={st === 'crit' ? 'critical' : st === 'warn' ? 'warning' : 'neutral'}
+                  detail={<><StatusBadge status={st === 'crit' ? 'critical' : st === 'warn' ? 'warning' : st === 'ok' ? 'healthy' : 'not reported'} /><div>{m.sub?.(latest) || (st === 'none' ? 'Not reported' : `warn ${m.invert ? '≤' : '≥'}${m.warn} · crit ${m.invert ? '≤' : '≥'}${m.crit}`)}</div></>}
+                  trend={<Spark values={series} color={color === COLOR.none ? 'var(--border)' : color} />} />
               );
             })}
           </div>
@@ -147,7 +147,8 @@ export default function ServiceMetricsPage() {
             in the agent yet.
           </p>
         </>
-      )}
+      ))}
+      </div>
     </div>
   );
 }

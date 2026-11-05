@@ -1,15 +1,21 @@
 'use client';
+import PageHeader from '@/components/PageHeader';
+import SectionHeader from '@/components/SectionHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import FilterBar from '@/components/ui/FilterBar';
+import Icon from '@/components/Icon';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { getPageContext } from '@/lib/navigation';
 import { api } from '@/lib/api';
 
 // ── Node palette ────────────────────────────────────────────────────────────
 const NODE_TYPES = {
-  client:       { label: 'Client',        icon: '👤', color: '#8b9bb4' },
-  firewall:     { label: 'Firewall',      icon: '🧱', color: '#f87171' },
-  loadbalancer: { label: 'Load Balancer', icon: '⚖️', color: '#fbbf24' },
-  ip:           { label: 'IP',            icon: '🌐', color: '#4f9dff' },
-  server:       { label: 'Server',        icon: '🖥️', color: '#34d399' },
-  db:           { label: 'Database',      icon: '🗄️', color: '#a78bfa' },
+  client:       { label: 'Client',        icon: 'profile', color: '#8b9bb4' },
+  firewall:     { label: 'Firewall',      icon: 'security', color: '#f87171' },
+  loadbalancer: { label: 'Load Balancer', icon: 'topology', color: '#fbbf24' },
+  ip:           { label: 'IP',            icon: 'topology', color: '#4f9dff' },
+  server:       { label: 'Server',        icon: 'environments', color: '#34d399' },
+  db:           { label: 'Database',      icon: 'products', color: '#a78bfa' },
 };
 const TYPE_ORDER = ['client', 'firewall', 'loadbalancer', 'ip', 'server', 'db'];
 const ENVIRONMENTS = ['dev', 'qa', 'staging', 'production'];
@@ -39,25 +45,31 @@ export default function TopologyPage() {
   const [dirty, setDirty] = useState(false);
   const [status, setStatus] = useState('');
   const [err, setErr] = useState('');
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [productsError, setProductsError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [meta, setMeta] = useState(null); // { updated_at, updated_by }
 
   const svgRef = useRef(null);
   const interact = useRef(null); // { mode:'node'|'link', id, ox, oy }
 
   // ── Load products ──────────────────────────────────────────────────────────
-  useEffect(() => {
+  const loadProducts = () => {
+    setProductsLoading(true); setProductsError('');
     api.products()
       .then((p) => {
         setProducts(p);
         if (p.length && !productId) setProductId(p[0].id);
       })
-      .catch((e) => setErr(e.message));
-  }, []); // eslint-disable-line
+      .catch((e) => setProductsError(e.message || 'Unable to load products')).finally(() => setProductsLoading(false));
+  };
+  useEffect(() => { loadProducts(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load graph whenever product or env changes ──────────────────────────────
   const loadGraph = useCallback(() => {
     if (!productId) return;
-    setErr(''); setStatus('');
+    setErr(''); setStatus(''); setLoading(true);
     api.topology(productId, env)
       .then((g) => {
         setNodes(Array.isArray(g.nodes) ? g.nodes : []);
@@ -65,7 +77,7 @@ export default function TopologyPage() {
         setSelected(null);
         setDirty(false);
       })
-      .catch((e) => setErr(e.message));
+      .catch((e) => setErr(e.message)).finally(() => setLoading(false));
     api.topologyEnvs(productId)
       .then((rows) => {
         const c = {};
@@ -217,14 +229,14 @@ export default function TopologyPage() {
   // ── Save ────────────────────────────────────────────────────────────────────
   const save = async () => {
     if (!productId) return;
-    setErr(''); setStatus('Saving…');
+    setErr(''); setStatus('Saving…'); setSaving(true);
     try {
       await api.saveTopology(productId, env, { nodes, edges });
       setDirty(false);
       setStatus('Saved ✓');
       setEnvCounts((c) => ({ ...c, [env]: nodes.length }));
       setTimeout(() => setStatus(''), 2000);
-    } catch (e) { setErr(e.message); setStatus(''); }
+    } catch (e) { setErr(e.message); setStatus(''); } finally { setSaving(false); }
   };
 
   // ── DnD from palette ────────────────────────────────────────────────────────
@@ -241,24 +253,18 @@ export default function TopologyPage() {
   const selEdge = selected?.kind === 'edge' ? edges.find((e) => e.id === selected.id) : null;
 
   return (
-    <div>
-      <div className="page-head">
-        <h2>🕸️ Topology</h2>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          {dirty && <span className="muted" style={{ fontSize: 13 }}>● unsaved changes</span>}
-          {status && <span style={{ fontSize: 13, color: 'var(--ok)' }}>{status}</span>}
-          <button onClick={save} disabled={!productId || !dirty}>💾 Save</button>
-        </div>
-      </div>
-
-      {err && <div className="error">{err}</div>}
-
-      {products.length === 0 ? (
+    <div style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }}>
+      <PageHeader {...getPageContext('/topology')} actions={<><span role="status">{status || (dirty ? 'Unsaved changes' : '')}</span><button onClick={save} disabled={!productId || !dirty || loading || saving}>{saving ? 'Saving…' : 'Save'}</button></>} wide />
+      {productsLoading && <FeedbackState kind="loading" title="Loading products…" />}
+      {productsError && <FeedbackState kind="error" description={productsError} action={<button onClick={loadProducts}>Retry</button>} />}
+      {loading && <FeedbackState kind="loading" title="Loading topology…" />}
+      {err && <FeedbackState kind="error" description={err} action={<button onClick={loadGraph} disabled={loading}>Reload graph</button>} />}
+      {!productsLoading && !productsError && (products.length === 0 ? (
         <p className="hint">Create a product first on the <b>Products</b> page — topology graphs are kept per product, per environment.</p>
       ) : (
         <>
           {/* product + environment selectors */}
-          <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
+          <FilterBar label="Topology filters">
             <label style={{ margin: 0 }}>
               <span style={{ marginRight: 8 }}>Product</span>
               <select style={{ width: 220, display: 'inline-block' }} value={productId}
@@ -268,7 +274,7 @@ export default function TopologyPage() {
             </label>
             <div className="env-tabs">
               {ENVIRONMENTS.map((ev) => (
-                <button key={ev} className={'env-tab' + (ev === env ? ' active' : '')}
+                <button key={ev} aria-pressed={ev === env} className={'env-tab' + (ev === env ? ' active' : '')}
                   onClick={() => setEnv(ev)}>
                   {ev}{envCounts[ev] ? <span className="env-count">{envCounts[ev]}</span> : null}
                 </button>
@@ -279,20 +285,23 @@ export default function TopologyPage() {
                 updated {new Date(meta.updated_at).toLocaleString()}
               </span>
             )}
-          </div>
-
+          </FilterBar>
+          <SectionHeader title="Infrastructure graph" description="Add nodes from the palette, then connect and edit them on the canvas." />
+          <div aria-busy={loading}>
+          {!loading && !err && nodes.length === 0 && <FeedbackState title="No nodes in this environment" description="Add a node from the palette to start this topology." />}
+          <div role="region" aria-label="Topology editor" tabIndex={0} className="focus-ring" style={{ maxWidth: '100%', overflowX: 'auto' }}>
           <div className="topo-wrap">
             {/* palette */}
             <div className="topo-palette">
               <div className="palette-title">Drag onto canvas</div>
               {TYPE_ORDER.map((t) => (
-                <div key={t} className="palette-item" draggable
+                <button type="button" key={t} className="palette-item" draggable
                   onDragStart={(e) => e.dataTransfer.setData('node-type', t)}
                   onClick={() => addNode(t, CANVAS_W / 2 - 200 + Math.random() * 400, 120 + Math.random() * 200)}
-                  style={{ borderLeft: `4px solid ${NODE_TYPES[t].color}` }}
+                  style={{ color: 'var(--text)', background: 'var(--panel)', textAlign: 'left' }}
                   title="Drag to canvas, or click to add">
-                  <span className="palette-icon">{NODE_TYPES[t].icon}</span> {NODE_TYPES[t].label}
-                </div>
+                  <span className="palette-icon"><Icon name={NODE_TYPES[t].icon} /></span> {NODE_TYPES[t].label}
+                </button>
               ))}
               <p className="palette-hint">
                 Drag the small dot on a node&apos;s right edge to another node to draw a relation.
@@ -362,7 +371,7 @@ export default function TopologyPage() {
                         fill="var(--panel)" stroke={isSel ? 'var(--accent)' : meta.color}
                         strokeWidth={isSel ? 2.5 : 1.5} />
                       <rect width={6} height={NH} rx={3} fill={meta.color} />
-                      <text x={16} y={24} fontSize="18">{meta.icon}</text>
+                      <g transform="translate(12, 10)"><Icon name={meta.icon} /></g>
                       <text x={40} y={23} fontSize="13" fontWeight="600" fill="var(--text)">
                         {(n.label || meta.label).slice(0, 16)}
                       </text>
@@ -391,7 +400,7 @@ export default function TopologyPage() {
               )}
               {selNode && (
                 <>
-                  <div className="insp-title">{NODE_TYPES[selNode.type]?.icon} Node</div>
+                  <div className="insp-title"><Icon name={NODE_TYPES[selNode.type]?.icon} /> Node</div>
                   <label>Type
                     <select value={selNode.type} onChange={(e) => patchNode(selNode.id, { type: e.target.value })}>
                       {TYPE_ORDER.map((t) => <option key={t} value={t}>{NODE_TYPES[t].label}</option>)}
@@ -412,7 +421,7 @@ export default function TopologyPage() {
               )}
               {selEdge && (
                 <>
-                  <div className="insp-title">🔗 Relation</div>
+                  <div className="insp-title">Relation</div>
                   <p className="muted" style={{ fontSize: 12, margin: '4px 0 8px' }}>
                     {nodeById[selEdge.from]?.label || '?'} → {nodeById[selEdge.to]?.label || '?'}
                   </p>
@@ -430,8 +439,10 @@ export default function TopologyPage() {
               </div>
             </div>
           </div>
+          </div>
+          </div>
         </>
-      )}
+      ))}
     </div>
   );
 }

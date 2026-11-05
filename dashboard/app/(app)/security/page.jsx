@@ -1,9 +1,17 @@
 'use client';
+import PageHeader from '@/components/PageHeader';
+import SectionHeader from '@/components/SectionHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import MetricCard from '@/components/ui/MetricCard';
+import StatusBadge from '@/components/ui/StatusBadge';
+import FilterBar from '@/components/ui/FilterBar';
+import FormField from '@/components/ui/FormField';
 import { useEffect, useMemo, useState } from 'react';
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from 'recharts';
+import { getPageContext } from '@/lib/navigation';
 import { api } from '@/lib/api';
 import PaginatedEventList from '@/components/PaginatedEventList';
 
@@ -26,11 +34,13 @@ export default function SecurityPage() {
   const [stats, setStats] = useState(null);
   const [grouped, setGrouped] = useState([]);
   const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [filterError, setFilterError] = useState('');
 
   useEffect(() => {
-    api.servers().then(setServers).catch(() => {});
-    api.secTypes().then(setTypes).catch(() => {});
+    api.servers().then(setServers).catch((e) => setFilterError(e.message || 'Unable to load server filters'));
+    api.secTypes().then(setTypes).catch((e) => setFilterError(e.message || 'Unable to load event types'));
     // Deep-link support: /security?serverId=...&type=...
     if (typeof window !== 'undefined') {
       const sp = new URLSearchParams(window.location.search);
@@ -48,13 +58,13 @@ export default function SecurityPage() {
   }), [filters]);
 
   const load = () => {
-    setLoading(true);
+    setLoading(true); setError('');
     Promise.all([
       api.secStats(apiFilters),
       api.secGrouped({ ...apiFilters, limit: 100 }),
       api.secEvents({ ...apiFilters, limit: 300 }),
     ]).then(([s, g, e]) => { setStats(s); setGrouped(g); setEvents(e); })
-      .catch(() => {})
+      .catch((e) => setError(e.message || 'Unable to load security events'))
       .finally(() => setLoading(false));
   };
 
@@ -87,72 +97,48 @@ export default function SecurityPage() {
   const sevData = (stats?.bySeverity || []).map((r) => ({ name: r.severity, value: r.c }));
 
   return (
-    <div>
-      <div className="page-head">
-        <h2>Security Events</h2>
-        <span className="muted">{loading ? 'Loading…' : `${stats?.total ?? 0} events`}</span>
-      </div>
-
+    <div style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }}>
+      <PageHeader {...getPageContext('/security')} wide />
+      {loading && <FeedbackState kind="loading" title="Loading security events…" />}
+      {error && <FeedbackState kind="error" description={error} action={<button onClick={load} disabled={loading}>Retry</button>} />}
+      {filterError && <FeedbackState kind="error" title="Some filters are unavailable" description={filterError} />}
       {/* FILTER BAR */}
-      <div className="filter-bar">
-        <div className="filter-field">
-          <label>Server</label>
-          <select value={filters.serverId} onChange={(e) => set('serverId', e.target.value)}>
+      <FilterBar label="Security filters">
+        <FormField label="Server"><select value={filters.serverId} onChange={(e) => set('serverId', e.target.value)}>
             <option value="">All servers</option>
             {servers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-        </div>
-        <div className="filter-field">
-          <label>Event type</label>
-          <select value={filters.type} onChange={(e) => set('type', e.target.value)}>
+          </select></FormField>
+        <FormField label="Event type"><select value={filters.type} onChange={(e) => set('type', e.target.value)}>
             <option value="">All types</option>
             {types.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-        <div className="filter-field">
-          <label>Severity</label>
-          <select value={filters.severity} onChange={(e) => set('severity', e.target.value)}>
+          </select></FormField>
+        <FormField label="Severity"><select value={filters.severity} onChange={(e) => set('severity', e.target.value)}>
             <option value="">All</option>
             {SEVS.map((s) => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </div>
-        <div className="filter-field">
-          <label>Source IP</label>
-          <input placeholder="e.g. 1.2.3" value={filters.sourceIp} onChange={(e) => set('sourceIp', e.target.value)} />
-        </div>
-        <div className="filter-field">
-          <label>Time range</label>
-          <select value={filters.rangeMs} onChange={(e) => set('rangeMs', Number(e.target.value))}>
+          </select></FormField>
+        <FormField label="Source IP"><input placeholder="e.g. 1.2.3" value={filters.sourceIp} onChange={(e) => set('sourceIp', e.target.value)} /></FormField>
+        <FormField label="Time range"><select value={filters.rangeMs} onChange={(e) => set('rangeMs', Number(e.target.value))}>
             {RANGES.map((r) => <option key={r.label} value={r.ms}>{r.label}</option>)}
-          </select>
-        </div>
+          </select></FormField>
         <button className="reset-btn" onClick={reset}>Reset</button>
-      </div>
+      </FilterBar>
+      <div aria-busy={loading}>
+      {!loading && !error && <>
 
       {/* SUMMARY CARDS */}
       <div className="metrics-grid">
-        <div className="metric-card"><h3>Total events</h3><div className="value">{stats?.total ?? 0}</div></div>
-        <div className="metric-card"><h3>Failed logins</h3><div className="value" style={{ color: 'var(--warn)' }}>{failedLogins}</div></div>
-        <div className="metric-card"><h3>High / Critical</h3><div className="value" style={{ color: 'var(--crit)' }}>{critHigh}</div></div>
-        <div className="metric-card"><h3>Top source IPs</h3><div className="value">{uniqueIps}</div></div>
-        <div className="metric-card"><h3>Servers affected</h3><div className="value">{serversAffected}</div></div>
-        {(hardeningIndex != null || lynisWarnings > 0 || lynisSuggestions > 0) && (
-          <div className="metric-card" title="Lynis host-hardening audit">
-            <h3>🛡️ Lynis hardening</h3>
-            <div className="value" style={{ color: hardColor }}>
-              {hardeningIndex == null ? '—' : `${hardeningIndex}/100`}
-            </div>
-            <div className="muted" style={{ fontSize: 12 }}>
-              {lynisWarnings} warnings · {lynisSuggestions} suggestions
-            </div>
-          </div>
-        )}
+        <MetricCard label="Total events" value={stats?.total ?? 0} />
+        <MetricCard label="Failed logins" value={failedLogins} tone="warning" />
+        <MetricCard label="High / critical" value={critHigh} tone="critical" />
+        <MetricCard label="Top source IPs" value={uniqueIps} />
+        <MetricCard label="Servers affected" value={serversAffected} />
+        {(hardeningIndex != null || lynisWarnings > 0 || lynisSuggestions > 0) && <MetricCard label="Lynis hardening" value={hardeningIndex == null ? null : `${hardeningIndex}/100`} detail={`${lynisWarnings} warnings · ${lynisSuggestions} suggestions`} />}
       </div>
 
       {/* CHARTS */}
-      <div className="chart-grid">
+      <div className="chart-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 320px), 1fr))' }}>
         <div className="card" style={{ gridColumn: '1 / -1' }}>
-          <h4>Events over time (by severity)</h4>
+          <SectionHeader title="Events over time (by severity)" />
           <ResponsiveContainer width="100%" height={240}>
             <AreaChart data={tsData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -168,7 +154,7 @@ export default function SecurityPage() {
         </div>
 
         <div className="card">
-          <h4>Events by type</h4>
+          <SectionHeader title="Events by type" />
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={typeData} layout="vertical" margin={{ left: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -181,7 +167,7 @@ export default function SecurityPage() {
         </div>
 
         <div className="card">
-          <h4>Top source IPs</h4>
+          <SectionHeader title="Top source IPs" />
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={ipData} layout="vertical" margin={{ left: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -194,7 +180,7 @@ export default function SecurityPage() {
         </div>
 
         <div className="card">
-          <h4>Severity breakdown</h4>
+          <SectionHeader title="Severity breakdown" />
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
               <Pie data={sevData} dataKey="value" nameKey="name" outerRadius={90} label>
@@ -207,7 +193,7 @@ export default function SecurityPage() {
         </div>
 
         <div className="card">
-          <h4>Events by server</h4>
+          <SectionHeader title="Events by server" />
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={(stats?.byServer || []).map((r) => ({ name: r.server_name || 'unknown', count: r.c }))} layout="vertical" margin={{ left: 30 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
@@ -221,17 +207,17 @@ export default function SecurityPage() {
       </div>
 
       {/* GROUPED OCCURRENCES — "how many times" */}
-      <h3 style={{ marginBottom: '12px' }}>Top occurrences</h3>
+      <SectionHeader title="Top occurrences" />
       <div style={{ background: 'var(--panel)', border: '1px solid var(--border)', borderRadius: '10px', overflow: 'hidden', marginBottom: '24px' }}>
         <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
-          <table className="grid" style={{ margin: 0, borderRadius: 0 }}>
+          <div role="region" aria-label="Security occurrences" tabIndex={0} className="focus-ring" style={{ maxWidth: '100%', overflowX: 'auto' }}><table className="grid" style={{ margin: 0, borderRadius: 0 }}>
             <thead style={{ position: 'sticky', top: 0, backgroundColor: 'var(--panel-2)', zIndex: 10 }}>
-              <tr><th>Severity</th><th>Type</th><th>Server</th><th>Source IP</th><th>Times</th><th>First seen</th><th>Last seen</th></tr>
+              <tr><th scope="col">Severity</th><th scope="col">Type</th><th scope="col">Server</th><th scope="col">Source IP</th><th scope="col">Times</th><th scope="col">First seen</th><th scope="col">Last seen</th></tr>
             </thead>
             <tbody>
               {grouped.map((g, i) => (
                 <tr key={i}>
-                  <td><span className={`pill sev-${g.severity}`}>{g.severity}</span></td>
+                  <td><StatusBadge status={g.severity === 'high' || g.severity === 'medium' ? 'warning' : g.severity}>{g.severity}</StatusBadge></td>
                   <td>{g.event_type}</td>
                   <td>{g.server_name || '—'}</td>
                   <td className="mono">{g.source_ip || '—'}</td>
@@ -242,11 +228,12 @@ export default function SecurityPage() {
               ))}
               {grouped.length === 0 && <tr><td colSpan="7" className="empty">No matching events.</td></tr>}
             </tbody>
-          </table>
+          </table></div>
         </div>
       </div>
 
       {/* DETAILED EVENTS — Using Paginated List */}
+      <SectionHeader title="Event log" />
       <PaginatedEventList
         events={events.map((e) => ({
           id: e.id,
@@ -262,6 +249,8 @@ export default function SecurityPage() {
         title={`Event log (${events.length})`}
         itemsPerPage={20}
       />
+      </>}
+      </div>
     </div>
   );
 }

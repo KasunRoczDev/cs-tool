@@ -1,5 +1,12 @@
 'use client';
+import PageHeader from '@/components/PageHeader';
+import SectionHeader from '@/components/SectionHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import StatusBadge from '@/components/ui/StatusBadge';
+import FilterBar from '@/components/ui/FilterBar';
+import FormField from '@/components/ui/FormField';
 import { useEffect, useState, useCallback } from 'react';
+import { getPageContext } from '@/lib/navigation';
 import { api } from '@/lib/api';
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -35,15 +42,7 @@ const WEBHOOK_HELP = {
 
 const STATUS_COLORS = { sent: '#34d399', failed: '#f87171', suppressed: '#94a3b8' };
 
-function SevPill({ s }) {
-  return (
-    <span style={{
-      display: 'inline-block', padding: '1px 7px', borderRadius: 10, fontSize: 11, fontWeight: 700,
-      background: (SEV_COLORS[s] || '#888') + '22', color: SEV_COLORS[s] || '#888',
-      border: `1px solid ${(SEV_COLORS[s] || '#888')}55`,
-    }}>{s}</span>
-  );
-}
+function SevPill({ s }) { return <StatusBadge status={s === 'high' || s === 'medium' ? 'warning' : s}>{s}</StatusBadge>; }
 
 function StatusDot({ s }) {
   return (
@@ -100,8 +99,8 @@ function ChannelForm({ initial, onSave, onCancel }) {
 
   return (
     <div className="card" style={{ marginBottom: 0 }}>
-      <h4 style={{ marginBottom: 16 }}>{initial ? 'Edit Channel' : 'New Channel'}</h4>
-      {err && <div style={{ color: 'var(--crit)', marginBottom: 10, fontSize: 13 }}>{err}</div>}
+      <SectionHeader title={initial ? 'Edit channel' : 'New channel'} />
+      {err && <FeedbackState kind="error" title="Check the notification settings" description={err} />}
       <div style={{ display: 'grid', gap: 12 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
           Channel name
@@ -231,8 +230,8 @@ function RuleForm({ channels, servers, initial, onSave, onCancel }) {
 
   return (
     <div className="card" style={{ marginBottom: 0 }}>
-      <h4 style={{ marginBottom: 16 }}>{initial ? 'Edit Rule' : 'New Notification Rule'}</h4>
-      {err && <div style={{ color: 'var(--crit)', marginBottom: 10, fontSize: 13 }}>{err}</div>}
+      <SectionHeader title={initial ? 'Edit rule' : 'New notification rule'} />
+      {err && <FeedbackState kind="error" title="Check the notification settings" description={err} />}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
           Channel
@@ -316,22 +315,36 @@ export default function NotificationsPage() {
   const [editChannel, setEditChannel] = useState(null);
   const [editRule, setEditRule] = useState(null);
   const [testing, setTesting] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [logLoading, setLogLoading] = useState(true);
+  const [logError, setLogError] = useState('');
+  const [actionError, setActionError] = useState('');
+  const [pending, setPending] = useState(false);
   const [toast, setToast] = useState('');
 
   const notify = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const load = useCallback(() => {
-    api.notifChannels().then(setChannels).catch(() => {});
-    api.notifRules().then(setRules).catch(() => {});
-    api.servers().then(setServers).catch(() => {});
+    setLoading(true); setLoadError('');
+    return Promise.all([api.notifChannels(), api.notifRules(), api.servers()])
+      .then(([c, r, s]) => { setChannels(c); setRules(r); setServers(s); })
+      .catch((e) => setLoadError(e.message || 'Unable to load notification configuration')).finally(() => setLoading(false));
   }, []);
 
   const loadLog = useCallback(() => {
-    api.notifLog(200).then(setLog).catch(() => {});
+    setLogLoading(true); setLogError('');
+    return api.notifLog(200).then(setLog).catch((e) => setLogError(e.message || 'Unable to load delivery history')).finally(() => setLogLoading(false));
   }, []);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (tab === 'log') loadLog(); }, [tab, loadLog]);
+
+  const runAction = async (fn) => {
+    setPending(true); setActionError('');
+    try { await fn(); } catch (e) { setActionError(e.message || 'Unable to complete action'); }
+    finally { setPending(false); }
+  };
 
   // Channel actions
   const saveChannel = async (body) => {
@@ -428,25 +441,26 @@ export default function NotificationsPage() {
   const fmtDate = (d) => d ? new Date(d).toLocaleString() : '—';
 
   return (
-    <div>
+    <div style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }}>
       {/* Toast */}
       {toast && (
         <div style={{
           position: 'fixed', top: 20, right: 24, zIndex: 9999,
           background: 'var(--accent)', color: '#fff', padding: '10px 18px',
           borderRadius: 8, fontSize: 13, boxShadow: '0 4px 16px #0004',
-        }}>{toast}</div>
+        }} role="status">{toast}</div>
       )}
 
-      <div className="page-head">
-        <h2>Notifications</h2>
-        <span className="muted">{channels.length} channel{channels.length !== 1 ? 's' : ''}, {rules.length} rule{rules.length !== 1 ? 's' : ''}</span>
-      </div>
-
+      <PageHeader {...getPageContext('/notifications')} wide />
+      {actionError && <FeedbackState kind="error" title="Unable to update notifications" description={actionError} />}
+      {tab !== 'log' && loading && <FeedbackState kind="loading" title="Loading notification configuration…" />}
+      {tab !== 'log' && loadError && <FeedbackState kind="error" description={loadError} action={<button onClick={load} disabled={loading}>Retry</button>} />}
+      {tab === 'log' && logLoading && <FeedbackState kind="loading" title="Loading delivery history…" />}
+      {tab === 'log' && logError && <FeedbackState kind="error" description={logError} action={<button onClick={loadLog} disabled={logLoading}>Retry</button>} />}
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 20, borderBottom: '1px solid var(--border)' }}>
+      <FilterBar label="Notification views">
         {['channels', 'rules', 'log'].map((t) => (
-          <button key={t} onClick={() => setTab(t)} style={{
+          <button key={t} aria-pressed={tab === t} onClick={() => setTab(t)} style={{
             padding: '8px 20px', background: 'none', border: 'none', cursor: 'pointer',
             fontSize: 14, fontWeight: tab === t ? 700 : 400,
             color: tab === t ? 'var(--accent)' : 'var(--muted)',
@@ -454,11 +468,13 @@ export default function NotificationsPage() {
             marginBottom: -1, textTransform: 'capitalize',
           }}>{t}</button>
         ))}
-      </div>
+      </FilterBar>
+      <div aria-busy={tab === 'log' ? logLoading : loading}>
 
       {/* ── CHANNELS TAB ── */}
-      {tab === 'channels' && (
+      {tab === 'channels' && !loading && !loadError && (
         <>
+          <SectionHeader title="Channels" />
           {(showChannelForm) ? (
             <ChannelForm
               initial={channelInitial}
@@ -482,9 +498,9 @@ export default function NotificationsPage() {
             {channels.map((ch) => (
               <div key={ch.id} className="card" style={{
                 opacity: ch.enabled ? 1 : 0.6,
-                borderLeft: `3px solid ${ch.enabled ? 'var(--accent)' : 'var(--border)'}`,
+
               }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
                   <div>
                     <div style={{ fontWeight: 700, fontSize: 15 }}>
                       {ch.name}
@@ -497,7 +513,7 @@ export default function NotificationsPage() {
                     {WEBHOOK_TYPES.includes(ch.type) ? (
                       <>
                         <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
-                          Webhook: <span style={{ color: 'var(--fg)' }}>
+                          Webhook: <span style={{ color: 'var(--text)' }}>
                             {(ch.config?.webhook_url ?? '').replace(/(\/[\w-]{6})[\w-]+$/, '$1…')}
                           </span>
                         </div>
@@ -509,7 +525,7 @@ export default function NotificationsPage() {
                     ) : (
                       <>
                         <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
-                          To: <span style={{ color: 'var(--fg)' }}>{ch.config?.to}</span>
+                          To: <span style={{ color: 'var(--text)' }}>{ch.config?.to}</span>
                           {ch.config?.cc && <> &nbsp;·&nbsp; CC: {ch.config.cc}</>}
                         </div>
                         <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
@@ -520,32 +536,32 @@ export default function NotificationsPage() {
                     )}
                     {ch.config?.events?.length > 0 && (
                       <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                        Events: <span style={{ color: 'var(--fg)' }}>{ch.config.events.join(', ')}</span>
+                        Events: <span style={{ color: 'var(--text)' }}>{ch.config.events.join(', ')}</span>
                       </div>
                     )}
                   </div>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
                     <button onClick={() => testChannel(ch)} disabled={testing === ch.id}
                       style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6,
                         background: 'var(--panel-2)', border: '1px solid var(--border)',
-                        cursor: 'pointer', color: 'var(--fg)' }}>
+                        cursor: 'pointer', color: 'var(--text)' }}>
                       {testing === ch.id ? 'Sending…' : 'Test'}
                     </button>
                     <button onClick={() => startEditChannel(ch)}
                       style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6,
                         background: 'var(--panel-2)', border: '1px solid var(--border)',
-                        cursor: 'pointer', color: 'var(--fg)' }}>Edit</button>
-                    <button onClick={() => toggleChannel(ch)}
+                        cursor: 'pointer', color: 'var(--text)' }}>Edit</button>
+                    <button disabled={pending} onClick={() => runAction(() => toggleChannel(ch))}
                       style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6,
-                        background: ch.enabled ? '#fef3c7' : '#d1fae5',
+                        background: 'var(--panel-2)',
                         border: '1px solid var(--border)', cursor: 'pointer',
-                        color: ch.enabled ? '#92400e' : '#065f46' }}>
+                        color: 'var(--text)' }}>
                       {ch.enabled ? 'Disable' : 'Enable'}
                     </button>
-                    <button onClick={() => delChannel(ch.id)}
+                    <button disabled={pending} onClick={() => runAction(() => delChannel(ch.id))}
                       style={{ fontSize: 12, padding: '4px 10px', borderRadius: 6,
-                        background: '#fee2e2', border: '1px solid #fca5a5',
-                        cursor: 'pointer', color: '#991b1b' }}>Delete</button>
+                        background: 'var(--panel-2)', border: '1px solid var(--border)',
+                        cursor: 'pointer', color: 'var(--text)' }}>Delete</button>
                   </div>
                 </div>
               </div>
@@ -555,8 +571,9 @@ export default function NotificationsPage() {
       )}
 
       {/* ── RULES TAB ── */}
-      {tab === 'rules' && (
+      {tab === 'rules' && !loading && !loadError && (
         <>
+          <SectionHeader title="Notification rules" />
           {showRuleForm ? (
             <RuleForm
               channels={channels}
@@ -582,11 +599,11 @@ export default function NotificationsPage() {
 
           <div style={{ marginTop: showRuleForm ? 16 : 0 }}>
             <div style={{ overflowX: 'auto' }}>
-              <table className="grid" style={{ margin: 0 }}>
+              <div role="region" aria-label="Notification data" tabIndex={0} className="focus-ring" style={{ maxWidth: '100%', overflowX: 'auto' }}><table className="grid" style={{ margin: 0 }}>
                 <thead>
                   <tr>
-                    <th>Channel</th><th>Server</th><th>Alert type</th>
-                    <th>Severities</th><th>Triggers</th><th>Cool-down</th><th>Status</th><th></th>
+                    <th scope="col">Channel</th><th scope="col">Server</th><th scope="col">Alert type</th>
+                    <th scope="col">Severities</th><th scope="col">Triggers</th><th scope="col">Cool-down</th><th scope="col">Status</th><th scope="col"></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -618,18 +635,18 @@ export default function NotificationsPage() {
                           <button onClick={() => startEditRule(r)}
                             style={{ fontSize: 11, padding: '3px 8px', borderRadius: 5,
                               background: 'var(--panel-2)', border: '1px solid var(--border)',
-                              cursor: 'pointer', color: 'var(--fg)' }}>Edit</button>
-                          <button onClick={() => toggleRule(r)}
+                              cursor: 'pointer', color: 'var(--text)' }}>Edit</button>
+                          <button disabled={pending} onClick={() => runAction(() => toggleRule(r))}
                             style={{ fontSize: 11, padding: '3px 8px', borderRadius: 5,
-                              background: r.enabled ? '#fef3c7' : '#d1fae5',
+                              background: 'var(--panel-2)',
                               border: '1px solid var(--border)', cursor: 'pointer',
-                              color: r.enabled ? '#92400e' : '#065f46' }}>
+                              color: 'var(--text)' }}>
                             {r.enabled ? 'Disable' : 'Enable'}
                           </button>
-                          <button onClick={() => delRule(r.id)}
+                          <button disabled={pending} onClick={() => runAction(() => delRule(r.id))}
                             style={{ fontSize: 11, padding: '3px 8px', borderRadius: 5,
-                              background: '#fee2e2', border: '1px solid #fca5a5',
-                              cursor: 'pointer', color: '#991b1b' }}>Del</button>
+                              background: 'var(--panel-2)', border: '1px solid var(--border)',
+                              cursor: 'pointer', color: 'var(--text)' }}>Del</button>
                         </div>
                       </td>
                     </tr>
@@ -638,24 +655,25 @@ export default function NotificationsPage() {
                     <tr><td colSpan={8} className="empty">No rules configured.</td></tr>
                   )}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           </div>
         </>
       )}
 
       {/* ── LOG TAB ── */}
-      {tab === 'log' && (
+      {tab === 'log' && !logLoading && !logError && (
         <>
+          <SectionHeader title="Delivery history" />
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
             <button className="btn-secondary" onClick={loadLog}>Refresh</button>
           </div>
           <div style={{ overflowX: 'auto' }}>
-            <table className="grid" style={{ margin: 0 }}>
+            <div role="region" aria-label="Notification data" tabIndex={0} className="focus-ring" style={{ maxWidth: '100%', overflowX: 'auto' }}><table className="grid" style={{ margin: 0 }}>
               <thead>
                 <tr>
-                  <th>When</th><th>Channel</th><th>Server</th>
-                  <th>Alert type</th><th>Event</th><th>Status</th><th>Error</th>
+                  <th scope="col">When</th><th scope="col">Channel</th><th scope="col">Server</th>
+                  <th scope="col">Alert type</th><th scope="col">Event</th><th scope="col">Status</th><th scope="col">Error</th>
                 </tr>
               </thead>
               <tbody>
@@ -686,10 +704,11 @@ export default function NotificationsPage() {
                   <tr><td colSpan={7} className="empty">No notification history yet.</td></tr>
                 )}
               </tbody>
-            </table>
+            </table></div>
           </div>
         </>
       )}
+      </div>
     </div>
   );
 }
