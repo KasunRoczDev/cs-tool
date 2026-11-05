@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
@@ -86,26 +86,49 @@ function bar(value) {
 export default function OverviewPage() {
   const [rows, setRows] = useState([]);
   const [products, setProducts] = useState([]);
+  const [loadStatus, setLoadStatus] = useState('loading');
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(null);
+  const requestId = useRef(0);
   const [showReg, setShowReg] = useState(false);
   const [editingEnv, setEditingEnv] = useState(null);     // server id
   const [editingProduct, setEditingProduct] = useState(null); // server id
   const [envFilter, setEnvFilter] = useState('');
   const [collapsed, setCollapsed] = useState({});         // { [productName]: bool }
 
-  const load = () => {
-    api.products().then(setProducts).catch(() => {});
-    return api.servers().then((servers) => {
-      api.overview().then((overview) => {
-        const metricMap = Object.fromEntries(overview.map((o) => [o.id, o]));
-        setRows(servers.map((s) => ({ ...s, ...metricMap[s.id] })));
-      }).catch(() => setRows(servers));
+  const load = useCallback(async () => {
+    // A late refresh must not replace a newer registration/retry response.
+    requestId.current += 1;
+    const id = requestId.current;
+    setLoadStatus('loading');
+    api.products().then((items) => {
+      if (id === requestId.current) setProducts(items);
     }).catch(() => {});
-  };
+    try {
+      const servers = await api.servers();
+      const overview = await api.overview().catch(() => null);
+      if (id !== requestId.current) return;
+      setRows((previous) => {
+        // Keep the server-list fallback, retaining known metrics on refresh.
+        const samples = overview ?? previous.map(({ id, cpu_usage, memory_usage, disk_usage, status }) =>
+          ({ id, cpu_usage, memory_usage, disk_usage, status }));
+        const metricMap = Object.fromEntries(samples.map((sample) => [sample.id, sample]));
+        return servers.map((server) => ({ ...server, ...metricMap[server.id] }));
+      });
+      setHasLoaded(true);
+      const metricsFailed = overview === null && servers.length > 0;
+      setLoadError(metricsFailed ? 'Live metrics could not be loaded. Showing available server data.' : null);
+      setLoadStatus(metricsFailed ? 'error' : 'success');
+    } catch {
+      if (id !== requestId.current) return;
+      setLoadError('Server data could not be loaded. Please try again.');
+      setLoadStatus('error');
+    }
+  }, []);
 
   useEffect(() => {
     load();
     const s = getSocket();
-    if (!s) return;
     const onMetric = (m) =>
       setRows((rs) =>
         rs.map((r) =>
@@ -116,15 +139,16 @@ export default function OverviewPage() {
       );
     const onStatus = (p) =>
       setRows((rs) => rs.map((r) => (r.id === p.serverId ? { ...r, status: p.status } : r)));
-    s.on('metric', onMetric);
-    s.on('server_status', onStatus);
+    s?.on('metric', onMetric);
+    s?.on('server_status', onStatus);
     const iv = setInterval(load, 30000);
     return () => {
-      s.off('metric', onMetric);
-      s.off('server_status', onStatus);
+      requestId.current += 1;
+      s?.off('metric', onMetric);
+      s?.off('server_status', onStatus);
       clearInterval(iv);
     };
-  }, []);
+  }, [load]);
 
   const getEnv = (r) => r.tags?.env || '';
 
@@ -173,46 +197,56 @@ export default function OverviewPage() {
       </header>
       {showReg && <RegisterServer onClose={() => { setShowReg(false); load(); }} />}
 
+      {loadError && (
+        <div className="overview-card overview-load-error" role="alert">
+          <div>
+            <strong>{hasLoaded ? 'Unable to refresh overview' : 'Unable to load overview'}</strong>
+            <p>{loadError}{hasLoaded && ' Previously loaded data remains available.'}</p>
+          </div>
+          <button type="button" className="btn-secondary" onClick={load} disabled={loadStatus === 'loading'}>Retry</button>
+        </div>
+      )}
+
       {/* Summary Cards */}
-      <section className="overview-metrics" aria-label="Server summary">
+      <section className="overview-metrics" aria-label="Server summary" aria-busy={loadStatus === 'loading'}>
         <div className="overview-metric">
           <h2 className="overview-metric-label">Total Servers</h2>
-          <div className="overview-metric-value">{rows.length}</div>
+          <div className="overview-metric-value">{hasLoaded ? rows.length : '—'}</div>
           <div className="overview-metric-meta">Monitoring</div>
         </div>
         <div className="overview-metric">
           <h2 className="overview-metric-label">Products</h2>
-          <div className="overview-metric-value">{products.length}</div>
+          <div className="overview-metric-value">{hasLoaded ? products.length : '—'}</div>
           <div className="overview-metric-meta">Tracked products</div>
         </div>
         <div className="overview-metric">
           <h2 className="overview-metric-label">Online</h2>
-          <div className="overview-metric-value is-online">{onlineCount}</div>
-          <div className="overview-metric-meta">{rows.length > 0 ? ((onlineCount / rows.length) * 100).toFixed(0) : 0}% available</div>
+          <div className="overview-metric-value is-online">{hasLoaded ? onlineCount : '—'}</div>
+          <div className="overview-metric-meta">{hasLoaded ? `${rows.length > 0 ? ((onlineCount / rows.length) * 100).toFixed(0) : 0}% available` : 'Awaiting data'}</div>
         </div>
         <div className="overview-metric">
           <h2 className="overview-metric-label">Offline</h2>
-          <div className="overview-metric-value is-offline">{offlineCount}</div>
+          <div className="overview-metric-value is-offline">{hasLoaded ? offlineCount : '—'}</div>
           <div className="overview-metric-meta">Needs attention</div>
         </div>
         <div className="overview-metric">
           <h2 className="overview-metric-label">Live</h2>
-          <div className="overview-metric-value is-live">{liveCount}</div>
+          <div className="overview-metric-value is-live">{hasLoaded ? liveCount : '—'}</div>
           <div className="overview-metric-meta">Production servers</div>
         </div>
         <div className="overview-metric">
           <h2 className="overview-metric-label">Staging</h2>
-          <div className="overview-metric-value is-staging">{stagingCount}</div>
+          <div className="overview-metric-value is-staging">{hasLoaded ? stagingCount : '—'}</div>
           <div className="overview-metric-meta">Pre-prod servers</div>
         </div>
         <div className="overview-metric">
           <h2 className="overview-metric-label">Avg CPU</h2>
-          <div className="overview-metric-value is-cpu">{avgCpu}%</div>
+          <div className="overview-metric-value is-cpu">{hasLoaded ? `${avgCpu}%` : '—'}</div>
           <div className="overview-metric-meta">Average load</div>
         </div>
         <div className="overview-metric">
           <h2 className="overview-metric-label">Avg Memory</h2>
-          <div className="overview-metric-value">{avgMemory}%</div>
+          <div className="overview-metric-value">{hasLoaded ? `${avgMemory}%` : '—'}</div>
           <div className="overview-metric-meta">Average usage</div>
         </div>
       </section>
@@ -312,7 +346,14 @@ export default function OverviewPage() {
         );
       })}
 
-      {groups.length === 0 && (
+      {!hasLoaded && loadStatus === 'loading' && (
+        <div className="overview-card overview-empty" role="status">
+          <strong>Loading servers…</strong>
+          <p>Fetching server health and resource usage.</p>
+        </div>
+      )}
+
+      {hasLoaded && groups.length === 0 && (rows.length > 0 || loadStatus === 'success') && (
         <div className="overview-card overview-empty" role="status">
           <strong>{rows.length === 0 ? 'No servers configured' : 'No servers match the filter'}</strong>
           <p>{rows.length === 0
@@ -335,6 +376,12 @@ export default function OverviewPage() {
         .overview-page .overview-metric-value.is-live { color: var(--env-live); }
         .overview-page .overview-metric-value.is-staging { color: var(--env-staging); }
         .overview-page .overview-metric-value.is-cpu { color: var(--warn); }
+        .overview-page .overview-load-error {
+          display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px;
+          margin-bottom: 16px;
+        }
+        .overview-page .overview-load-error strong { color: var(--crit); }
+        .overview-page .overview-load-error p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
         .overview-page .overview-filter { align-items: center; }
         .overview-page .overview-filter-label { color: var(--muted); font-size: 13px; font-weight: 600; }
         .overview-page .overview-filter-options { display: flex; flex-wrap: wrap; gap: 6px; }

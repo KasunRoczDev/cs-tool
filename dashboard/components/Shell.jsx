@@ -122,7 +122,6 @@ export default function Shell({ children }) {
         { href: '/billing/services', label: 'Services', icon: 'billing' },
         { href: '/billing/service-types', label: 'Service Types', icon: 'billing' },
         { href: '/billing/monthly-entry', label: 'Monthly Entry', icon: 'billing' },
-        { href: '/billing/import', label: 'Import Bill', icon: 'billing' },
         { href: '/billing/history', label: 'Billing History', icon: 'billing' },
         { href: '/billing/report', label: 'Billing Report', icon: 'billing' },
       ],
