@@ -22,6 +22,11 @@ const paths = {
   brand: 'M12 2 3 6v6c0 5 5 8 9 10 4-2 9-5 9-10V6l-9-4Z M7 7h10v7H7z M12 14v3 M9 17h6',
   menu: 'M4 6h16 M4 12h16 M4 18h16',
   close: 'm6 6 12 12 M18 6 6 18',
+  search: 'M10.5 3a7.5 7.5 0 1 1 0 15 7.5 7.5 0 0 1 0-15Z M16 16l5 5',
+  chevron: 'm9 5 7 7-7 7',
+  logout: 'M9 4H4v16h5 M10 12h11 M17 8l4 4-4 4',
+  sun: 'M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z M12 2v2 M12 20v2 M2 12h2 M20 12h2 M5 5l1.5 1.5 M17.5 17.5 19 19 M5 19l1.5-1.5 M17.5 6.5 19 5',
+  moon: 'M20.5 14A9 9 0 0 1 10 3.5 9 9 0 1 0 20.5 14Z',
 };
 
 export default function Icon({ name, size = 18 }) {

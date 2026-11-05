@@ -4,43 +4,144 @@ import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import { api, getToken, setToken, setRole, getRole } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
+import { navigationGroups, getPageContext } from '@/lib/navigation';
+import { useDashboard } from '@/lib/useDashboard';
+import Breadcrumbs from './Breadcrumbs';
 import Icon from './Icon';
 
 const PASSKEY_NUDGE_DISMISSED_KEY = 'passkeyNudgeDismissed';
+const workspaceIcons = {
+  Home: 'overview', Observe: 'monitoring', Secure: 'security',
+  Deliver: 'deployments', FinOps: 'billing', Admin: 'settings',
+};
+
+// Search is deliberately limited to permitted destinations from the navigation contract.
+function NavigationSearch({ groups, onNavigate }) {
+  const [query, setQuery] = useState('');
+  const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const resultsRef = useRef(null);
+  const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const results = groups.flatMap(({ section, items }) => items.map((item) => ({ ...item, workspace: section })))
+    .filter((item) => words.every((word) => `${item.label} ${item.workspace} ${item.description} ${item.href}`.toLowerCase().includes(word)));
+  const selectedIndex = Math.min(activeIndex, Math.max(0, results.length - 1));
+
+  useEffect(() => {
+    if (open) resultsRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
+  }, [open, selectedIndex, query]);
+
+  const select = (item) => {
+    setOpen(false);
+    setQuery('');
+    onNavigate(item.href);
+  };
+
+  const onKeyDown = (event) => {
+    if (event.nativeEvent.isComposing) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setOpen(false);
+    } else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      setOpen(true);
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      setActiveIndex(open ? (selectedIndex + step + results.length) % Math.max(1, results.length)
+        : event.key === 'ArrowDown' ? 0 : Math.max(0, results.length - 1));
+    } else if (open && (event.key === 'Home' || event.key === 'End')) {
+      event.preventDefault();
+      setActiveIndex(event.key === 'Home' ? 0 : Math.max(0, results.length - 1));
+    } else if (open && event.key === 'Enter' && results[selectedIndex]) {
+      event.preventDefault();
+      select(results[selectedIndex]);
+    } else if (event.key === 'Tab') {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div className="shell-search" role="search" aria-label="Navigation"
+      onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}>
+      <label className="shell-sr-only" htmlFor="shell-navigation-search">Search pages</label>
+      <Icon name="search" size={18} />
+      <input id="shell-navigation-search" type="search" role="combobox" autoComplete="off" spellCheck={false}
+        placeholder="Search pages…" value={query} aria-expanded={open} aria-controls={open ? 'shell-search-results' : undefined}
+        aria-autocomplete="list" aria-activedescendant={open && results.length ? `shell-search-option-${selectedIndex}` : undefined}
+        onFocus={() => setOpen(true)} onClick={() => setOpen(true)} onKeyDown={onKeyDown}
+        onChange={(event) => { setQuery(event.target.value); setActiveIndex(0); setOpen(true); }} />
+      {open && (
+        <div className="shell-search-popover">
+          <ul id="shell-search-results" ref={resultsRef} role="listbox" aria-label="Pages">
+            {results.map((item, index) => (
+              <li id={`shell-search-option-${index}`} key={item.href} role="option" aria-selected={index === selectedIndex}
+                onMouseDown={(event) => event.preventDefault()} onClick={() => select(item)}>
+                <Icon name={item.icon} size={18} />
+                <span className="shell-search-result-copy"><strong>{item.label}</strong><span>{item.workspace}</span></span>
+                <Icon name="chevron" size={14} />
+              </li>
+            ))}
+          </ul>
+          <p className="shell-search-help" role="status">
+            {results.length ? `${results.length} pages · Use arrow keys to browse, Enter to open.` : 'No pages found. Try another page or workspace name.'}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Shell({ children }) {
   const router = useRouter();
   const pathname = usePathname();
+  const { theme, toggleTheme } = useDashboard();
   const [ready, setReady] = useState(false);
   const [role, setRoleState] = useState(null);
   const [alertCount, setAlertCount] = useState(0);
   const [showPasskeyNudge, setShowPasskeyNudge] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState({});
   const sidebarRef = useRef(null);
   const mobileToggleRef = useRef(null);
+  const bodyRef = useRef(null);
+  const mainRef = useRef(null);
+  const context = getPageContext(pathname);
+  const workspace = context?.workspace;
+  const currentDestination = context?.parent?.href || context?.href;
 
   useEffect(() => {
     setMobileNavOpen(false);
   }, [pathname]);
 
   useEffect(() => {
+    if (!workspace) return;
+    const destinationGroup = navigationGroups(role).find((group) => group.items.some((item) => item.href === currentDestination));
+    setExpandedGroups((previous) => ({
+      ...previous, [workspace]: true, ...(destinationGroup ? { [destinationGroup.section]: true } : {}),
+    }));
+  }, [pathname, workspace, currentDestination, role]);
+
+  useEffect(() => {
     if (!mobileNavOpen) return;
     const sidebar = sidebarRef.current;
     const mobileToggle = mobileToggleRef.current;
+    const body = bodyRef.current;
+    const main = mainRef.current;
     const previousOverflow = document.body.style.overflow;
     const desktop = window.matchMedia('(min-width: 761px)');
     document.body.style.overflow = 'hidden';
-    sidebar?.querySelector('button, a[href]')?.focus();
+    if (body) body.inert = true;
+    const controls = () => Array.from(sidebar?.querySelectorAll('a[href], button:not(:disabled)') || [])
+      .filter((control) => control.getClientRects().length > 0);
+    controls()[0]?.focus();
 
     const onKeyDown = (event) => {
       if (event.key === 'Escape') {
         event.preventDefault();
         setMobileNavOpen(false);
       }
-      if (event.key !== 'Tab' || !sidebar) return;
-      const controls = sidebar.querySelectorAll('a[href], button');
-      const first = controls[0];
-      const last = controls[controls.length - 1];
+      if (event.key !== 'Tab') return;
+      const focusable = controls();
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
       if (event.shiftKey && document.activeElement === first) {
         event.preventDefault();
         last?.focus();
@@ -49,15 +150,20 @@ export default function Shell({ children }) {
         first?.focus();
       }
     };
+    const onFocus = (event) => { if (!sidebar?.contains(event.target)) controls()[0]?.focus(); };
     const onResize = () => { if (desktop.matches) setMobileNavOpen(false); };
     onResize();
-    window.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('focusin', onFocus);
     desktop.addEventListener('change', onResize);
     return () => {
       document.body.style.overflow = previousOverflow;
-      window.removeEventListener('keydown', onKeyDown);
+      if (body) body.inert = false;
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('focusin', onFocus);
       desktop.removeEventListener('change', onResize);
-      mobileToggle?.focus();
+      if (mobileToggle?.getClientRects().length) mobileToggle.focus();
+      else if (sidebar?.contains(document.activeElement)) main?.focus();
     };
   }, [mobileNavOpen]);
 
@@ -90,161 +196,103 @@ export default function Shell({ children }) {
 
   if (!ready) return null;
 
-  // Sidebar grouped by service so Monitoring and Release Management are clearly separated.
-  const navGroups = [
-    {
-      section: null, // top-level, no header
-      items: [
-        { href: '/', label: 'Overview', icon: 'overview' },
-      ],
-    },
-    {
-      section: 'Monitoring',
-      items: [
-        { href: '/products', label: 'Products', icon: 'products' },
-        { href: '/apps', label: 'Apps', icon: 'apps' },
-        { href: '/topology', label: 'Topology', icon: 'topology' },
-        { href: '/performance', label: 'Performance', icon: 'performance' },
-        { href: '/service-metrics', label: 'Service Metrics', icon: 'monitoring' },
-        { href: '/fpm', label: 'PHP-FPM', icon: 'monitoring' },
-        { href: '/security', label: 'Security', icon: 'security' },
-        { href: '/vulnerability-report', label: 'Vuln Report', icon: 'security' },
-        { href: '/alerts', label: 'Alerts', icon: 'alerts' },
-        { href: '/compare', label: 'Compare', icon: 'performance' },
-        { href: '/notifications', label: 'Notifications', icon: 'notifications' },
-        { href: '/analysis', label: 'Analysis', icon: 'monitoring' },
-      ],
-    },
-    {
-      section: 'Billing',
-      items: [
-        { href: '/billing/dashboard', label: 'Billing Dashboard', icon: 'billing' },
-        { href: '/billing/services', label: 'Services', icon: 'billing' },
-        { href: '/billing/service-types', label: 'Service Types', icon: 'billing' },
-        { href: '/billing/monthly-entry', label: 'Monthly Entry', icon: 'billing' },
-        { href: '/billing/history', label: 'Billing History', icon: 'billing' },
-        { href: '/billing/report', label: 'Billing Report', icon: 'billing' },
-      ],
-    },
-    {
-      section: 'Release Management',
-      items: [
-        { href: '/release-dashboard', label: 'Release Dashboard', icon: 'overview' },
-        { href: '/repositories', label: 'Repositories', icon: 'repositories' },
-        { href: '/releases', label: 'Releases', icon: 'releases' },
-        { href: '/release-board', label: 'Release Board', icon: 'releases' },
-        { href: '/deployments', label: 'Deployments', icon: 'deployments' },
-        { href: '/release-metrics', label: 'Release Metrics', icon: 'performance' },
-        { href: '/release-calendar', label: 'Release Calendar', icon: 'releases' },
-        { href: '/environments', label: 'Environments', icon: 'environments' },
-        { href: '/ai', label: 'AI Assistant', icon: 'admin-tools' },
-        ...(role === 'admin' ? [{ href: '/release-workflows', label: 'Workflow Config', icon: 'admin-tools' }] : []),
-        ...(role === 'admin' ? [{ href: '/audit-log', label: 'Audit Log', icon: 'admin-tools' }] : []),
-        ...(role === 'admin' ? [{ href: '/agent-updates', label: 'Agent Updates', icon: 'admin-tools' }] : []),
-      ],
-    },
-    {
-      section: 'System',
-      items: [
-        { href: '/setup', label: 'Setup Guide', icon: 'setup' },
-        ...(role === 'admin' ? [{ href: '/users', label: 'Users', icon: 'users' }] : []),
-        ...(role === 'admin' ? [{ href: '/access', label: 'Access Control', icon: 'access' }] : []),
-        // Personal account security (passkeys, trusted devices) — per-user, not shared app config.
-        { href: '/profile', label: 'My Profile', icon: 'profile' },
-        // Settings available to all roles (theme); SMTP read-only for non-admin
-        { href: '/settings', label: 'Settings', icon: 'settings' },
-      ],
-    },
-  ];
-
-  const isActiveRoute = (href) => href === '/'
-    ? pathname === '/'
-    : pathname === href || pathname.startsWith(`${href}/`);
+  const groups = navigationGroups(role);
+  const breadcrumbs = context ? [
+    { label: context.workspace },
+    ...(context.parent ? [{ label: context.parent.title, href: context.parent.href }] : []),
+    { label: context.title },
+  ] : [{ label: 'Workspace' }];
 
   return (
     <div className={`layout shell-layout${mobileNavOpen ? ' mobile-nav-open' : ''}`}>
-      <header className="mobile-nav-header">
-        <div className="brand"><Icon name="brand" size={24} /> Monitor</div>
-        <button ref={mobileToggleRef} type="button" className="mobile-nav-toggle icon-button focus-ring"
-          aria-label="Open navigation" aria-controls="primary-navigation" aria-expanded={mobileNavOpen}
-          onClick={() => setMobileNavOpen((open) => !open)}>
-          <Icon name="menu" size={20} />
-        </button>
-      </header>
+      <a className="shell-skip-link" href="#shell-main">Skip to content</a>
       {mobileNavOpen && (
-        <button type="button" className="mobile-nav-backdrop focus-ring" aria-label="Dismiss navigation"
+        <button type="button" className="mobile-nav-backdrop" aria-label="Dismiss navigation"
           tabIndex={-1} onClick={() => setMobileNavOpen(false)} />
       )}
-      <aside ref={sidebarRef} id="primary-navigation" className="sidebar" aria-label="Main navigation"
+      <aside ref={sidebarRef} id="primary-navigation" className="sidebar" aria-label="Workspaces"
         role={mobileNavOpen ? 'dialog' : undefined} aria-modal={mobileNavOpen ? 'true' : undefined}>
         <div className="sidebar-brand-row">
-          <div className="brand"><Icon name="brand" size={24} /> Monitor</div>
-          <button type="button" className="mobile-nav-close icon-button focus-ring" aria-label="Close navigation"
+          <Link href="/" className="brand" aria-label="Monitor overview" onClick={() => setMobileNavOpen(false)}>
+            <Icon name="brand" size={26} /> Monitor
+          </Link>
+          <button type="button" className="mobile-nav-close icon-button" aria-label="Close navigation"
             onClick={() => setMobileNavOpen(false)}><Icon name="close" size={20} /></button>
         </div>
-        <nav aria-label="Primary">
-          {navGroups.map((group, gi) => (
-            <div key={group.section ?? `group-${gi}`} className="nav-group">
-              {group.section && <div className="nav-section">{group.section}</div>}
-              {group.items.map((n) => (
-                <Link key={n.href} href={n.href} className={isActiveRoute(n.href) ? 'active' : ''}
-                  aria-current={isActiveRoute(n.href) ? 'page' : undefined} onClick={() => setMobileNavOpen(false)}>
-                  <span className="nav-icon"><Icon name={n.icon} /></span>
-                  <span>{n.label}</span>
-                  {n.href === '/alerts' && alertCount > 0 && <span className="badge"> {alertCount}</span>}
-                </Link>
-              ))}
-            </div>
-          ))}
+        <nav className="shell-workspaces" aria-label="Primary">
+          {groups.map((group) => {
+            const expanded = expandedGroups[group.section] ?? (group.section === 'Home' || group.section === workspace);
+            const groupId = `workspace-${group.section.toLowerCase()}`;
+            return (
+              <div key={group.section} className={`nav-group${workspace === group.section ? ' nav-group-current' : ''}`}>
+                <button type="button" className="shell-workspace-toggle" aria-expanded={expanded} aria-controls={groupId}
+                  onClick={() => setExpandedGroups((previous) => ({ ...previous, [group.section]: !expanded }))}>
+                  <Icon name={workspaceIcons[group.section]} size={18} />
+                  <span>{group.section}</span>
+                  <span className="shell-workspace-chevron"><Icon name="chevron" size={14} /></span>
+                </button>
+                <div id={groupId} className="shell-workspace-links" hidden={!expanded}>
+                  {group.items.map((item) => {
+                    const active = currentDestination === item.href;
+                    return (
+                      <Link key={item.href} href={item.href} className={active ? 'active' : ''}
+                        aria-current={active ? 'page' : undefined} onClick={() => setMobileNavOpen(false)}>
+                        <span className="nav-icon"><Icon name={item.icon} size={16} /></span>
+                        <span className="shell-nav-label">{item.label}</span>
+                        {item.href === '/alerts' && alertCount > 0 && (
+                          <span className="shell-alert-badge" aria-label={`${alertCount} active alerts`}>{alertCount}</span>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </nav>
-        <div className="role-tag">{role}</div>
-        <button className="logout" onClick={() => { setToken(null); setRole(null); router.push('/login'); }}>
-          Log out
-        </button>
-      </aside>
-      <main className="content" aria-hidden={mobileNavOpen ? 'true' : undefined}>
-        {showPasskeyNudge && pathname !== '/profile' && (
-          <div className="passkey-nudge">
-            <span>🔑 Set up a passkey for faster, more secure sign-in.</span>
-            <div className="passkey-nudge-actions">
-              <Link href="/profile" className="btn-primary passkey-nudge-link">Set up</Link>
-              <button type="button" className="icon-button focus-ring" onClick={dismissPasskeyNudge} aria-label="Dismiss">
-                <Icon name="close" size={16} />
-              </button>
-            </div>
+        <footer className="shell-account">
+          <Link href="/setup" className="shell-help" onClick={() => setMobileNavOpen(false)}>
+            <Icon name="setup" size={16} /> Setup guide
+          </Link>
+          <div className="shell-account-row">
+            <Link href="/profile" className="shell-profile" onClick={() => setMobileNavOpen(false)}>
+              <Icon name="profile" size={20} />
+              <span>My profile<span className="shell-role">{role}</span></span>
+            </Link>
+            <button type="button" className="icon-button" aria-label="Log out" title="Log out"
+              onClick={() => { setToken(null); setRole(null); router.push('/login'); }}>
+              <Icon name="logout" size={18} />
+            </button>
           </div>
-        )}
-        {children}
-      </main>
-      <style jsx global>{`
-        .shell-layout .brand { display: flex; align-items: center; gap: 10px; }
-        .shell-layout .brand svg { flex-shrink: 0; color: var(--accent); }
-        .shell-layout .sidebar-brand-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-        .shell-layout .mobile-nav-header,
-        .shell-layout .mobile-nav-toggle,
-        .shell-layout .mobile-nav-close { display: none; }
-        .shell-layout .sidebar .badge { margin-left: auto; }
-        @media (max-width: 760px) {
-          .shell-layout .mobile-nav-header {
-            display: flex; align-items: center; justify-content: space-between; gap: 12px;
-            padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--border);
-          }
-          .shell-layout .mobile-nav-header .brand { margin: 0; }
-          .shell-layout .mobile-nav-toggle, .shell-layout .mobile-nav-close { display: inline-grid; }
-          .shell-layout .sidebar {
-            position: fixed; inset: 0 auto 0 0; z-index: 101; width: min(280px, 88vw);
-            height: 100vh; height: 100dvh; visibility: hidden; transform: translateX(-100%);
-            box-shadow: var(--shadow-md); transition: transform var(--motion-normal);
-          }
-          .shell-layout.mobile-nav-open .sidebar { visibility: visible; transform: translateX(0); }
-          .shell-layout .mobile-nav-backdrop {
-            display: block; position: fixed; inset: 0; z-index: 100; width: 100%; height: 100%;
-            padding: 0; border: 0; border-radius: 0; background: rgb(0 0 0 / 55%);
-          }
-          .shell-layout .mobile-nav-backdrop:hover { filter: none; }
-          .shell-layout .mobile-nav-backdrop:active { transform: none; }
-        }
-      `}</style>
+        </footer>
+      </aside>
+      <div ref={bodyRef} className="shell-body" aria-hidden={mobileNavOpen ? 'true' : undefined}>
+        <header className="shell-topbar">
+          <button ref={mobileToggleRef} type="button" className="mobile-nav-toggle icon-button"
+            aria-label="Open navigation" aria-controls="primary-navigation" aria-expanded={mobileNavOpen}
+            onClick={() => setMobileNavOpen(true)}><Icon name="menu" size={20} /></button>
+          <div className="shell-page-context"><Breadcrumbs items={breadcrumbs} /></div>
+          <NavigationSearch key={pathname} groups={groups} onNavigate={(href) => router.push(href)} />
+          <button type="button" className="icon-button shell-theme-toggle" onClick={toggleTheme}
+            aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`} title={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}>
+            <Icon name={theme === 'light' ? 'moon' : 'sun'} size={18} />
+          </button>
+        </header>
+        <main ref={mainRef} id="shell-main" className="content" tabIndex={-1}>
+          {showPasskeyNudge && pathname !== '/profile' && (
+            <div className="passkey-nudge">
+              <span className="shell-passkey-copy"><Icon name="access" size={18} /> Set up a passkey for faster, more secure sign-in.</span>
+              <div className="passkey-nudge-actions">
+                <Link href="/profile" className="btn-primary passkey-nudge-link">Set up</Link>
+                <button type="button" className="icon-button focus-ring" onClick={dismissPasskeyNudge} aria-label="Dismiss">
+                  <Icon name="close" size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
