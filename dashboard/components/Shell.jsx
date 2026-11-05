@@ -272,11 +272,11 @@ export default function Shell({ children }) {
             aria-label="Open navigation" aria-controls="primary-navigation" aria-expanded={mobileNavOpen}
             onClick={() => setMobileNavOpen(true)}><Icon name="menu" size={20} /></button>
           <div className="shell-page-context"><Breadcrumbs items={breadcrumbs} /></div>
-          <NavigationSearch key={pathname} groups={groups} onNavigate={(href) => router.push(href)} />
           <button type="button" className="icon-button shell-theme-toggle" onClick={toggleTheme}
             aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`} title={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}>
             <Icon name={theme === 'light' ? 'moon' : 'sun'} size={18} />
           </button>
+          <NavigationSearch key={pathname} groups={groups} onNavigate={(href) => router.push(href)} />
         </header>
         <main ref={mainRef} id="shell-main" className="content" tabIndex={-1}>
           {showPasskeyNudge && pathname !== '/profile' && (
