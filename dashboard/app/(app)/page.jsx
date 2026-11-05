@@ -6,16 +6,12 @@ import { getSocket } from '@/lib/socket';
 import RegisterServer from '@/components/RegisterServer';
 
 const ENV_OPTIONS = ['live', 'staging', 'dev', 'test'];
-const ENV_COLORS = { live: '#34d399', staging: '#fbbf24', dev: '#60a5fa', test: '#a78bfa' };
 const UNASSIGNED = '— Unassigned —';
 
 function EnvTag({ env }) {
   if (!env) return null;
-  const color = ENV_COLORS[env] || '#888';
   return (
-    <span className="overview-env-tag" style={{
-      '--env-color': color, '--env-background': color + '22', '--env-border': color + '66',
-    }}>{env}</span>
+    <span className={`overview-env-tag overview-env-${ENV_OPTIONS.includes(env) ? env : 'unknown'}`}>{env}</span>
   );
 }
 
@@ -336,8 +332,8 @@ export default function OverviewPage() {
         .overview-page .overview-metric-value { color: var(--accent); }
         .overview-page .overview-metric-value.is-online { color: var(--ok); }
         .overview-page .overview-metric-value.is-offline { color: var(--crit); }
-        .overview-page .overview-metric-value.is-live { color: ${ENV_COLORS.live}; }
-        .overview-page .overview-metric-value.is-staging { color: ${ENV_COLORS.staging}; }
+        .overview-page .overview-metric-value.is-live { color: var(--env-live); }
+        .overview-page .overview-metric-value.is-staging { color: var(--env-staging); }
         .overview-page .overview-metric-value.is-cpu { color: var(--warn); }
         .overview-page .overview-filter { align-items: center; }
         .overview-page .overview-filter-label { color: var(--muted); font-size: 13px; font-weight: 600; }
@@ -383,6 +379,11 @@ export default function OverviewPage() {
           padding: 3px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase;
           color: var(--env-color); background: var(--env-background); border: 1px solid var(--env-border);
         }
+        .overview-page .overview-env-live { --env-color: var(--env-live); --env-background: color-mix(in srgb, var(--env-live) 12%, transparent); --env-border: color-mix(in srgb, var(--env-live) 45%, transparent); }
+        .overview-page .overview-env-staging { --env-color: var(--env-staging); --env-background: color-mix(in srgb, var(--env-staging) 12%, transparent); --env-border: color-mix(in srgb, var(--env-staging) 45%, transparent); }
+        .overview-page .overview-env-dev { --env-color: var(--env-dev); --env-background: color-mix(in srgb, var(--env-dev) 12%, transparent); --env-border: color-mix(in srgb, var(--env-dev) 45%, transparent); }
+        .overview-page .overview-env-test { --env-color: var(--env-test); --env-background: color-mix(in srgb, var(--env-test) 12%, transparent); --env-border: color-mix(in srgb, var(--env-test) 45%, transparent); }
+        .overview-page .overview-env-unknown { --env-color: var(--muted); --env-background: color-mix(in srgb, var(--muted) 12%, transparent); --env-border: color-mix(in srgb, var(--muted) 45%, transparent); }
         .overview-page .overview-server-table .overview-last-seen { font-size: 12px; color: var(--muted); white-space: nowrap; }
         .overview-page .meter { display: flex; align-items: center; gap: 8px; width: 100px; background: transparent; overflow: visible; }
         .overview-page .overview-meter-track { width: 55px; height: 5px; flex-shrink: 0; border-radius: 5px; background: var(--panel-2); overflow: hidden; }

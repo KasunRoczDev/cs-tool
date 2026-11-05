@@ -11,6 +11,10 @@
   --ok: #40c99a;
   --warn: #f2bd4f;
   --crit: #f07878;
+  --env-live: #34d399;
+  --env-staging: #fbbf24;
+  --env-dev: #60a5fa;
+  --env-test: #a78bfa;
   --surface-raised: #1c2a3e;
   --text-subtle: #b5c2d3;
   --focus: #82baff;
@@ -36,6 +40,10 @@
   --ok: #13845f;
   --warn: #a96b0a;
   --crit: #c43f48;
+  --env-live: #087f5b;
+  --env-staging: #9a6700;
+  --env-dev: #2563a8;
+  --env-test: #6d42b5;
   --surface-raised: #f8fafd;
   --text-subtle: #455a73;
   --focus: #1d69bf;
