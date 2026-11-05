@@ -30,7 +30,7 @@
   --panel-2: #edf2f8;
   --border: #d8e1ec;
   --text: #172438;
-  --muted: #64758b;
+  --muted: #5b6b80;
   --accent: #276fc1;
   --accent-foreground: #ffffff;
   --ok: #13845f;
@@ -87,7 +87,7 @@ label input { margin-top: 4px; }
 .nav-group + .nav-group { margin-top: 14px; }
 .nav-section {
   font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em;
-  color: var(--muted); opacity: .65; padding: 4px 12px 4px; margin-top: 2px;
+  color: var(--muted); padding: 4px 12px 4px; margin-top: 2px;
 }
 .logout { background: transparent; color: var(--muted); border: 1px solid var(--border); }
 .content { flex: 1; padding: 24px 28px; overflow: auto; }
@@ -136,7 +136,7 @@ label input { margin-top: 4px; }
 .pill.sev-high { color: #fb923c; }
 .pill.sev-critical { color: var(--crit); }
 
-.badge { background: var(--crit); color: #fff; border-radius: 999px; padding: 0 7px; font-size: 11px; }
+.badge { background: var(--crit); color: var(--accent-foreground); border-radius: 999px; padding: 0 7px; font-size: 11px; }
 
 /* chips */
 .chip-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }

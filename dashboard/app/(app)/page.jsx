@@ -346,6 +346,8 @@ export default function OverviewPage() {
           padding: 6px 12px; background: transparent; color: var(--text);
           border: 1px solid var(--border); font-size: 12px;
         }
+        .overview-page .modal-backdrop { z-index: 50; }
+        .overview-page .modal { max-width: calc(100vw - 32px); }
         .overview-page .overview-filter-button:hover { background: var(--panel-2); filter: none; }
         .overview-page .overview-filter-button.is-selected {
           background: var(--accent); color: var(--accent-foreground); border-color: var(--accent);
