@@ -204,7 +204,7 @@ export default function OverviewPage() {
       <section className="overview-metrics" aria-label="Server summary" aria-busy={loadStatus === 'loading'}>
         <MetricCard label="Total servers" value={hasLoaded ? rows.length : null} detail="Monitoring" tone="neutral" />
         <MetricCard label="Products" value={hasLoaded ? products.length : null} detail="Tracked products" tone="neutral" />
-        <MetricCard label="Online" value={hasLoaded ? onlineCount : null} detail="Available servers" tone="positive" />
+        <MetricCard label="Online" value={hasLoaded ? onlineCount : null} detail={hasLoaded ? `${rows.length > 0 ? ((onlineCount / rows.length) * 100).toFixed(0) : 0}% available` : 'Awaiting data'} tone="positive" />
         <MetricCard label="Offline" value={hasLoaded ? offlineCount : null} detail="Needs attention" tone="critical" />
         <MetricCard label="Live" value={hasLoaded ? liveCount : null} detail="Production servers" tone="neutral" />
         <MetricCard label="Staging" value={hasLoaded ? stagingCount : null} detail="Pre-production servers" tone="neutral" />

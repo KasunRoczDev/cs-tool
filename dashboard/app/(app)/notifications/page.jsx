@@ -315,8 +315,11 @@ export default function NotificationsPage() {
   const [editChannel, setEditChannel] = useState(null);
   const [editRule, setEditRule] = useState(null);
   const [testing, setTesting] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState('');
+  const [datasets, setDatasets] = useState({
+    channels: { loading: true, error: '', loaded: false },
+    rules: { loading: true, error: '', loaded: false },
+    servers: { loading: true, error: '', loaded: false },
+  });
   const [logLoading, setLogLoading] = useState(true);
   const [logError, setLogError] = useState('');
   const [actionError, setActionError] = useState('');
@@ -326,10 +329,21 @@ export default function NotificationsPage() {
   const notify = (msg) => { setToast(msg); setTimeout(() => setToast(''), 3000); };
 
   const load = useCallback(() => {
-    setLoading(true); setLoadError('');
-    return Promise.all([api.notifChannels(), api.notifRules(), api.servers()])
-      .then(([c, r, s]) => { setChannels(c); setRules(r); setServers(s); })
-      .catch((e) => setLoadError(e.message || 'Unable to load notification configuration')).finally(() => setLoading(false));
+    const loadDataset = async (key, request, apply) => {
+      setDatasets((previous) => ({ ...previous, [key]: { ...previous[key], loading: true, error: '' } }));
+      try {
+        const items = await request();
+        apply(items);
+        setDatasets((previous) => ({ ...previous, [key]: { loading: false, error: '', loaded: true } }));
+      } catch (e) {
+        setDatasets((previous) => ({ ...previous, [key]: { ...previous[key], loading: false, error: e.message || `Unable to load ${key}` } }));
+      }
+    };
+    return Promise.allSettled([
+      loadDataset('channels', () => api.notifChannels(), setChannels),
+      loadDataset('rules', () => api.notifRules(), setRules),
+      loadDataset('servers', () => api.servers(), setServers),
+    ]);
   }, []);
 
   const loadLog = useCallback(() => {
@@ -453,8 +467,9 @@ export default function NotificationsPage() {
 
       <PageHeader {...getPageContext('/notifications')} wide />
       {actionError && <FeedbackState kind="error" title="Unable to update notifications" description={actionError} />}
-      {tab !== 'log' && loading && <FeedbackState kind="loading" title="Loading notification configuration…" />}
-      {tab !== 'log' && loadError && <FeedbackState kind="error" description={loadError} action={<button onClick={load} disabled={loading}>Retry</button>} />}
+      {tab !== 'log' && datasets[tab].loading && <FeedbackState kind="loading" title={datasets[tab].loaded ? 'Refreshing notification configuration…' : 'Loading notification configuration…'} />}
+      {tab !== 'log' && datasets[tab].error && <FeedbackState kind="error" title={`Unable to load ${tab}`} description={datasets[tab].error} action={<button onClick={load} disabled={datasets[tab].loading}>Retry</button>} />}
+      {tab === 'rules' && ['channels', 'servers'].map((key) => datasets[key].error && <FeedbackState key={key} kind="error" title={`Unable to load ${key} for rule settings`} description={datasets[key].error} action={<button onClick={load} disabled={datasets[key].loading}>Retry</button>} />)}
       {tab === 'log' && logLoading && <FeedbackState kind="loading" title="Loading delivery history…" />}
       {tab === 'log' && logError && <FeedbackState kind="error" description={logError} action={<button onClick={loadLog} disabled={logLoading}>Retry</button>} />}
       {/* Tabs */}
@@ -469,10 +484,10 @@ export default function NotificationsPage() {
           }}>{t}</button>
         ))}
       </FilterBar>
-      <div aria-busy={tab === 'log' ? logLoading : loading}>
+      <div aria-busy={tab === 'log' ? logLoading : datasets[tab].loading}>
 
       {/* ── CHANNELS TAB ── */}
-      {tab === 'channels' && !loading && !loadError && (
+      {tab === 'channels' && (datasets.channels.loaded || showChannelForm) && (
         <>
           <SectionHeader title="Channels" />
           {(showChannelForm) ? (
@@ -571,7 +586,7 @@ export default function NotificationsPage() {
       )}
 
       {/* ── RULES TAB ── */}
-      {tab === 'rules' && !loading && !loadError && (
+      {tab === 'rules' && (datasets.rules.loaded || showRuleForm) && (
         <>
           <SectionHeader title="Notification rules" />
           {showRuleForm ? (

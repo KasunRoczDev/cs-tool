@@ -114,7 +114,7 @@ export default function AppDetailPage() {
         <button disabled={saving || serversLoading || !linkServerId} onClick={linkServer}>{saving ? 'Saving…' : 'Link server'}</button>
       </div>
       <div aria-busy={serversLoading}>
-      {!serversLoading && !serversError && (servers.length === 0 ? (
+      {(servers.length > 0 || (!serversLoading && !serversError)) && (servers.length === 0 ? (
         <FeedbackState title="Not hosted on any server yet" description="Choose a server above to link this app." />
       ) : (
         servers.map((s) => (

@@ -6,7 +6,7 @@ import MetricCard from '@/components/ui/MetricCard';
 import StatusBadge from '@/components/ui/StatusBadge';
 import FilterBar from '@/components/ui/FilterBar';
 import FormField from '@/components/ui/FormField';
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { getPageContext } from '@/lib/navigation';
 import { api } from '@/lib/api';
 
@@ -73,6 +73,7 @@ export default function ServiceMetricsPage() {
   const [serversLoading, setServersLoading] = useState(true);
   const [serversError, setServersError] = useState('');
   const [loadedServerId, setLoadedServerId] = useState('');
+  const requestId = useRef(0);
 
   const loadServers = () => {
     setServersLoading(true); setServersError('');
@@ -84,14 +85,21 @@ export default function ServiceMetricsPage() {
 
   const load = useCallback(() => {
     if (!serverId) return;
+    const currentRequest = ++requestId.current;
     setLoading(true); setErr('');
-    api.securityEvents(serverId, 'service_metrics_snapshot')
-      .then((r) => { setRows(Array.isArray(r) ? r : []); setLoadedServerId(serverId); })
-      .catch((e) => setErr(e.message))
-      .finally(() => setLoading(false));
+    return api.securityEvents(serverId, 'service_metrics_snapshot')
+      .then((r) => {
+        if (currentRequest !== requestId.current) return;
+        setRows(Array.isArray(r) ? r : []); setLoadedServerId(serverId);
+      })
+      .catch((e) => { if (currentRequest === requestId.current) setErr(e.message); })
+      .finally(() => { if (currentRequest === requestId.current) setLoading(false); });
   }, [serverId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    return () => { requestId.current += 1; };
+  }, [load]);
 
   const latest = rows[0]?.raw || null;
   const history = useMemo(() => rows.slice().reverse(), [rows]); // chronological
@@ -101,7 +109,7 @@ export default function ServiceMetricsPage() {
     <div style={{ minWidth: 0, maxWidth: '100%', overflowWrap: 'anywhere' }}>
       <PageHeader {...getPageContext('/service-metrics')} wide />
       <FilterBar label="Server selection"><FormField label="Server">
-        <select value={serverId} onChange={(e) => { setServerId(e.target.value); setErr(''); }}>
+        <select value={serverId} onChange={(e) => { requestId.current += 1; setServerId(e.target.value); setErr(''); }}>
           {servers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
       </FormField><button onClick={load} disabled={loading || !serverId}>{loading ? 'Refreshing…' : 'Refresh'}</button></FilterBar>
