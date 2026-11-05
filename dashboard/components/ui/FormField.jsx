@@ -50,8 +50,9 @@ export default function FormField({ id, label, hint, error, children, required =
         'aria-invalid': hasError ? true : child.props['aria-invalid'],
         required: required || child.props.required,
       };
-      // Preserve option labels in groups; a single custom control also needs the field label.
-      if (!grouped && !child.props['aria-label']) {
+      // Native choice controls retain both the linked field label and their own option label.
+      const nativeChoice = child.type === 'input' && ['checkbox', 'radio'].includes(child.props.type);
+      if (!grouped && !nativeChoice && !child.props['aria-label']) {
         props['aria-labelledby'] = [labelId, child.props['aria-labelledby']].filter(Boolean).join(' ');
       }
       return cloneElement(child, props);

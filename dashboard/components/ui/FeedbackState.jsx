@@ -6,14 +6,16 @@ const defaults = {
   error: { title: 'Unable to load data', icon: 'alerts' },
 };
 
-/** `action` is a caller-owned control, including its disabled/submitting behavior. */
+/**
+ * `action` is a caller-owned control, including its disabled/submitting behavior.
+ * Mark the separate content region aria-busy; keep this live announcement outside it.
+ */
 export default function FeedbackState({ kind = 'empty', title, description, action, compact = false }) {
   const mode = Object.prototype.hasOwnProperty.call(defaults, kind) ? kind : 'empty';
   const state = defaults[mode];
 
   return (
-    <div className={`ui-feedback ui-feedback--${mode}${compact ? ' ui-feedback--compact' : ''}`}
-      aria-busy={mode === 'loading'}>
+    <div className={`ui-feedback ui-feedback--${mode}${compact ? ' ui-feedback--compact' : ''}`}>
       <div className="ui-feedback-message" role={mode === 'error' ? 'alert' : 'status'} aria-atomic="true">
         <span className="ui-feedback-icon"><Icon name={state.icon} size={20} /></span>
         <div className="ui-feedback-copy">
