@@ -1,5 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import PageHeader from '@/components/PageHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import { getPageContext } from '@/lib/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import { getSocket } from '@/lib/socket';
 
@@ -23,16 +26,26 @@ export default function DeploymentsPage() {
   const [board, setBoard] = useState([]);
   const [deps, setDeps] = useState([]);
   const [err, setErr] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const loadRequest = useRef(0);
   const [msg, setMsg] = useState('');
   const [historyFor, setHistoryFor] = useState(null);
   const [history, setHistory] = useState([]);
   const [jobsFor, setJobsFor] = useState(null);
   const [jobs, setJobs] = useState([]);
 
-  const load = () => {
-    api.deploymentBoard().then(setBoard).catch((e) => setErr(e.message));
-    api.deployments().then(setDeps).catch((e) => setErr(e.message));
-  };
+  const load = useCallback(async () => {
+    const request = ++loadRequest.current;
+    setLoading(true); setLoadError('');
+    const results = await Promise.allSettled([api.deploymentBoard(), api.deployments()]);
+    if (request !== loadRequest.current) return;
+    if (results[0].status === 'fulfilled') setBoard(results[0].value);
+    if (results[1].status === 'fulfilled') setDeps(results[1].value);
+    setLoadError(results.filter((result) => result.status === 'rejected').map((result) => result.reason?.message || 'Unable to load deployments').join(' '));
+    setLoaded(true); setLoading(false);
+  }, []);
   useEffect(() => {
     load();
     const s = getSocket();
@@ -40,7 +53,7 @@ export default function DeploymentsPage() {
     const onEvt = () => load();
     s.on('release_event', onEvt);
     return () => s.off('release_event', onEvt);
-  }, []);
+  }, [load]);
 
   const guard = async (fn, m) => {
     setErr(''); setMsg('');
@@ -61,12 +74,15 @@ export default function DeploymentsPage() {
 
   return (
     <div>
-      <div className="page-head"><h2>🛳️ Deployments</h2></div>
-      {err && <div className="error">{err}</div>}
-      {msg && <div className="hint">{msg}</div>}
+      <PageHeader title={getPageContext("/deployments").title} description={getPageContext("/deployments").description} />
+      {loading && <FeedbackState kind="loading" compact title={loaded ? 'Refreshing deployments…' : 'Loading deployments…'} />}
+      {loadError && <FeedbackState kind="error" title="Some deployment data could not be loaded" description={loadError} action={<button onClick={load} disabled={loading}>Retry</button>} />}
+      {err && <FeedbackState kind="error" title="Request failed" description={err} />}
+      {msg && <p className="hint" role="status">{msg}</p>}
 
       {/* Channel pipeline board */}
       <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 8 }}>
+        {!loading && !loadError && board.length === 0 && <FeedbackState kind="empty" title="No release channels configured" compact />}
         {board.map(({ channel, current, latest }) => (
           <div key={channel.id} style={{
             flex: '1 0 200px', border: '1px solid var(--border,#3334)', borderRadius: 10, padding: 14,
@@ -105,6 +121,8 @@ export default function DeploymentsPage() {
 
       {/* Deployment history */}
       <h3 style={{ marginTop: 24 }}>History</h3>
+      {loaded && !loading && !loadError && deps.length === 0 && <FeedbackState kind="empty" title="No deployments yet" />}
+      <div className="ui-data-table ui-data-table--scroll" role="region" aria-label="Deployment history table" tabIndex={0} style={{ maxWidth: '100%', minWidth: 0 }}>
       <table className="grid">
         <thead><tr><th>Release</th><th>Channel</th><th>Status</th><th>Version</th><th>Rollback target</th><th>By</th><th>When</th><th></th></tr></thead>
         <tbody>
@@ -204,6 +222,7 @@ export default function DeploymentsPage() {
           {deps.length === 0 && <tr><td colSpan="8" className="empty">No deployments yet. Deploy a release from its detail page.</td></tr>}
         </tbody>
       </table>
+      </div>
       <p className="hint" style={{ marginTop: 16 }}>
         Each channel shows its current version, previous version and pre-computed rollback target.
         Approval-gated channels stay <i>pending</i> until approved; rollback re-promotes the prior

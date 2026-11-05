@@ -391,7 +391,6 @@ label input { margin-top: 4px; }
 .page-header { width: 100%; max-width: 1200px; min-width: 0; margin: 0 auto 28px; }
 .page-header--wide { max-width: none; }
 .page-header-context { display: flex; align-items: baseline; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 16px; min-width: 0; }
-.page-header-workspace { color: var(--text-subtle); font-size: .8125rem; font-weight: 600; overflow-wrap: anywhere; }
 .breadcrumbs { min-width: 0; max-width: 100%; font-size: .8125rem; line-height: 1.5; }
 .breadcrumbs ol { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; list-style: none; margin: 0; padding: 0; }
 .breadcrumbs li { display: inline-flex; align-items: baseline; gap: 10px; min-width: 0; max-width: 100%; color: var(--muted); overflow-wrap: anywhere; }

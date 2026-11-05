@@ -1,5 +1,10 @@
 'use client';
+import PageHeader from '@/components/PageHeader';
+import FormField from '@/components/ui/FormField';
+import FeedbackState from '@/components/ui/FeedbackState';
+
 import { useEffect, useState } from 'react';
+import { getPageContext } from '@/lib/navigation';
 import { api, getRole } from '@/lib/api';
 import { useDashboard } from '@/lib/useDashboard';
 import { Section, Field } from '@/components/SettingsUI';
@@ -275,10 +280,7 @@ function BillingCurrencySection() {
 export default function SettingsPage() {
   return (
     <div>
-      <div className="page-head">
-        <h2>Settings</h2>
-        <span className="muted">Appearance &amp; platform configuration</span>
-      </div>
+      <PageHeader {...getPageContext("/settings")} />
 
       <ThemeSection />
       <SmtpSection />

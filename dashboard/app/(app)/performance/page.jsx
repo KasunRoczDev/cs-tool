@@ -7,7 +7,7 @@ import EnvironmentBadge from '@/components/ui/EnvironmentBadge';
 import StatusBadge from '@/components/ui/StatusBadge';
 import FilterBar from '@/components/ui/FilterBar';
 import FormField from '@/components/ui/FormField';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
   BarChart, Bar,
@@ -62,10 +62,10 @@ export default function PerformancePage() {
   };
   useEffect(() => { loadServers(); }, []);
 
-  const filteredServers = servers.filter((s) => {
+  const filteredServers = useMemo(() => servers.filter((s) => {
     if (envFilter && s.tags?.env !== envFilter) return false;
     return true;
-  });
+  }), [servers, envFilter]);
 
   const loadMetrics = useCallback(async () => {
     if (filteredServers.length === 0) { setSeriesMap({}); setError(''); setLoading(false); return; }
@@ -87,7 +87,7 @@ export default function PerformancePage() {
     if (results.some((r) => r.status === 'rejected')) setError('Metrics could not be loaded for one or more servers. Available series are shown.');
     setSeriesMap(map);
     setLoading(false);
-  }, [filteredServers.map((s) => s.id).join(','), rangeMs, metric]);
+  }, [filteredServers, rangeMs, metric]);
 
   useEffect(() => { loadMetrics(); }, [loadMetrics]);
 

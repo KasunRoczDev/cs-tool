@@ -1,9 +1,14 @@
 'use client';
-import { useEffect, useState } from 'react';
+import PageHeader from '@/components/PageHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import { getPageContext } from '@/lib/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid,
 } from 'recharts';
 import { api } from '@/lib/api';
+import FilterBar from '@/components/ui/FilterBar';
+import FormField from '@/components/ui/FormField';
 
 const TIER_COLOR = {
   Elite: '#22c55e', High: '#3b82f6', Medium: '#eab308', Low: '#ef4444', 'N/A': '#64748b',
@@ -33,7 +38,7 @@ function TierBadge({ tier }) {
 
 function StatTile({ title, value, sub, tier }) {
   return (
-    <div className="card" style={{ flex: '1 1 220px' }}>
+    <div className="ui-surface" style={{ flex: '1 1 220px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <h4 style={{ margin: 0 }}>{title}</h4>
         {tier && <TierBadge tier={tier} />}
@@ -50,12 +55,31 @@ export default function ReleaseMetricsPage() {
   const [days, setDays] = useState(30);
   const [metrics, setMetrics] = useState(null);
   const [err, setErr] = useState('');
-
-  useEffect(() => { api.channels().then(setChannels).catch(() => {}); }, []);
+  const [loading, setLoading] = useState(true);
+  const [channelError, setChannelError] = useState('');
+  const requestId = useRef(0);
 
   useEffect(() => {
-    api.deploymentMetrics(channel, days).then(setMetrics).catch((e) => setErr(e.message));
+    api.channels().then(setChannels).catch((e) => setChannelError(e.message || 'Unable to load channels'));
+  }, []);
+
+  const load = useCallback(async () => {
+    const current = ++requestId.current;
+    setLoading(true); setErr('');
+    try {
+      const result = await api.deploymentMetrics(channel, days);
+      if (current === requestId.current) setMetrics(result);
+    } catch (e) {
+      if (current === requestId.current) setErr(e.message || 'Unable to load release metrics');
+    } finally {
+      if (current === requestId.current) setLoading(false);
+    }
   }, [channel, days]);
+
+  useEffect(() => {
+    load();
+    return () => { requestId.current += 1; };
+  }, [load]);
 
   const series = (metrics?.deployment_frequency.series || []).map((s) => ({
     day: new Date(s.day).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
@@ -64,21 +88,23 @@ export default function ReleaseMetricsPage() {
 
   return (
     <div>
-      <div className="page-head"><h2>📈 Release Metrics</h2></div>
-      {err && <div className="error">{err}</div>}
+      <PageHeader title={getPageContext("/release-metrics").title} description={getPageContext("/release-metrics").description} />
+      {channelError && <FeedbackState kind="error" compact title="Channels unavailable" description={channelError} action={<button onClick={() => { setChannelError(''); api.channels().then(setChannels).catch((e) => setChannelError(e.message || 'Unable to load channels')); }}>Retry</button>} />}
+      {err && <FeedbackState kind="error" title="Unable to load release metrics" description={err} action={<button onClick={load} disabled={loading}>Retry</button>} />}
 
-      <div className="inline-form" style={{ marginBottom: 16 }}>
-        <select value={channel} onChange={(e) => setChannel(e.target.value)}>
+      <FilterBar label="Release metric filters">
+        <FormField label="Channel"><select value={channel} onChange={(e) => setChannel(e.target.value)}>
           {channels.map((c) => <option key={c.id} value={c.key}>{c.name}</option>)}
-        </select>
-        <select value={days} onChange={(e) => setDays(Number(e.target.value))}>
+        </select></FormField>
+        <FormField label="Time range"><select value={days} onChange={(e) => setDays(Number(e.target.value))}>
           {DAY_RANGES.map((d) => <option key={d} value={d}>last {d} days</option>)}
-        </select>
-      </div>
+        </select></FormField>
+        <button onClick={load} disabled={loading}>{loading ? 'Refreshing…' : 'Refresh'}</button>
+      </FilterBar>
 
-      {!metrics ? (
-        <p className="empty">Loading…</p>
-      ) : (
+      {loading && <FeedbackState kind="loading" compact title={metrics ? 'Refreshing release metrics…' : 'Loading release metrics…'} />}
+      {!loading && !err && !metrics && <FeedbackState kind="empty" title="No release metrics available" />}
+      {!loading && !err && metrics && (
         <>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
             <StatTile
@@ -117,14 +143,14 @@ export default function ReleaseMetricsPage() {
             />
           </div>
 
-          <div className="card">
+          <div className="ui-surface">
             <h4>Deployments per day — {channels.find((c) => c.key === channel)?.name || channel}</h4>
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={series} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2f3a" />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#9aa4b2' }} minTickGap={20} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: '#9aa4b2' }} />
-                <Tooltip contentStyle={{ background: '#161a22', border: '1px solid #2a2f3a' }} labelStyle={{ color: '#cbd5e1' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: 'var(--muted)' }} minTickGap={20} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: 'var(--muted)' }} />
+                <Tooltip contentStyle={{ background: 'var(--panel)', color: 'var(--text)', border: '1px solid var(--border)' }} labelStyle={{ color: 'var(--text)' }} />
                 <Bar dataKey="count" fill="#4f9dff" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>

@@ -6,7 +6,7 @@ import MetricCard from '@/components/ui/MetricCard';
 import StatusBadge from '@/components/ui/StatusBadge';
 import FilterBar from '@/components/ui/FilterBar';
 import FormField from '@/components/ui/FormField';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, Tooltip, CartesianGrid, Legend,
@@ -57,7 +57,7 @@ export default function SecurityPage() {
     from: new Date(Date.now() - filters.rangeMs).toISOString(),
   }), [filters]);
 
-  const load = () => {
+  const load = useCallback(() => {
     setLoading(true); setError('');
     Promise.all([
       api.secStats(apiFilters),
@@ -66,10 +66,10 @@ export default function SecurityPage() {
     ]).then(([s, g, e]) => { setStats(s); setGrouped(g); setEvents(e); })
       .catch((e) => setError(e.message || 'Unable to load security events'))
       .finally(() => setLoading(false));
-  };
+  }, [apiFilters]);
 
   // refetch whenever filters change
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [apiFilters]);
+  useEffect(() => { load(); }, [load]);
 
   const set = (k, v) => setFilters((f) => ({ ...f, [k]: v }));
   const reset = () => setFilters({ serverId: '', type: '', severity: '', sourceIp: '', rangeMs: 24 * 3600e3 });

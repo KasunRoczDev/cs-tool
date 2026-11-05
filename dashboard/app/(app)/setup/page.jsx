@@ -1,5 +1,10 @@
 'use client';
+import PageHeader from '@/components/PageHeader';
+import FormField from '@/components/ui/FormField';
+import FeedbackState from '@/components/ui/FeedbackState';
 
+
+import { getPageContext } from '@/lib/navigation';
 import { useState } from 'react';
 import { useDashboard } from '@/lib/useDashboard';
 
@@ -279,13 +284,7 @@ export default function SetupPage() {
 
   return (
     <div>
-      <div className="page-head">
-        <h2>Agent Setup Guide</h2>
-        <p style={{ margin: '8px 0 0 0', color: 'var(--muted)', fontSize: '13px' }}>
-          Packaged (.deb) install for Ubuntu/Debian servers — see <code>agent/INSTALL.md</code> in
-          the repository for the full reference.
-        </p>
-      </div>
+      <PageHeader {...getPageContext("/setup")} />
 
       <div style={{ display: 'grid', gridTemplateColumns: '250px 1fr', gap: '20px', marginTop: '20px' }}>
         {/* Sidebar Steps */}

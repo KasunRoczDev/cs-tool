@@ -1,13 +1,16 @@
 'use client';
-import { useEffect, useState } from 'react';
+import PageHeader from '@/components/PageHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import { getPageContext } from '@/lib/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 
 function Card({ title, children, empty }) {
   return (
-    <div className="card" style={{ flex: '1 1 320px' }}>
+    <div className="ui-surface" style={{ flex: '1 1 320px' }}>
       <h4 style={{ marginTop: 0 }}>{title}</h4>
-      {empty ? <p className="empty">{empty}</p> : children}
+      {empty ? <FeedbackState kind="empty" title={empty} compact /> : children}
     </div>
   );
 }
@@ -26,16 +29,25 @@ export default function ReleaseDashboardPage() {
 
   useEffect(() => { api.products().then(setProducts).catch(() => {}); }, []);
 
-  const load = () => api.releaseDashboard(productId || undefined).then(setData).catch((e) => setErr(e.message));
-  useEffect(() => { load(); }, [productId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [loadState, setLoadState] = useState({ pending: true, error: '' });
+  const loadRequest = useRef(0);
+  const load = useCallback(async () => {
+    const request = ++loadRequest.current;
+    setLoadState({ pending: true, error: '' });
+    try {
+      const result = await api.releaseDashboard(productId || undefined);
+      if (request === loadRequest.current) { setData(result); setLoadState({ pending: false, error: '' }); }
+    } catch (e) {
+      if (request === loadRequest.current) setLoadState({ pending: false, error: e.message });
+    }
+  }, [productId]);
+  useEffect(() => { load(); }, [load]);
 
   return (
     <div>
-      <div className="page-head">
-        <h2>🏠 Release Dashboard</h2>
-        <button onClick={load}>↻ Refresh</button>
-      </div>
-      {err && <div className="error">{err}</div>}
+      <PageHeader title={getPageContext('/release-dashboard').title} description={getPageContext('/release-dashboard').description}
+        actions={<button onClick={load} disabled={loadState.pending}>Refresh</button>} />
+      {err && <FeedbackState kind="error" title="Request failed" description={err} />}
 
       <div className="inline-form" style={{ marginBottom: 16 }}>
         <select value={productId} onChange={(e) => setProductId(e.target.value)}>
@@ -44,8 +56,10 @@ export default function ReleaseDashboardPage() {
         </select>
       </div>
 
+      {data && loadState.error && <FeedbackState kind="error" description={loadState.error} action={<button onClick={load}>Retry</button>} />}
+      {data && loadState.pending && <FeedbackState kind="loading" title="Refreshing delivery activity…" compact />}
       {!data ? (
-        <p className="empty">Loading…</p>
+        <FeedbackState kind={loadState.error ? "error" : "loading"} title={loadState.error ? "Unable to load delivery activity" : "Loading delivery activity…"} description={loadState.error || undefined} action={loadState.error ? <button onClick={load}>Retry</button> : undefined} />
       ) : (
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <Card title="Active Releases" empty={data.active_releases.length === 0 ? 'No active releases.' : null}>

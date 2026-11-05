@@ -1,5 +1,8 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import PageHeader from '@/components/PageHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import { getPageContext } from '@/lib/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 import GitGraph from '@/components/GitGraph';
 import BranchManager from '@/components/BranchManager';
@@ -19,11 +22,22 @@ export default function RepositoriesPage() {
   const [graphRepo, setGraphRepo] = useState(null); // repo for the visualizer
   const [branchRepo, setBranchRepo] = useState(null); // repo for branch manager
 
-  const load = () => api.repositories().then(setRepos).catch((e) => setErr(e.message));
+  const [loadState, setLoadState] = useState({ pending: true, error: '' });
+  const loadRequest = useRef(0);
+  const load = useCallback(async () => {
+    const request = ++loadRequest.current;
+    setLoadState({ pending: true, error: '' });
+    try {
+      const result = await api.repositories();
+      if (request === loadRequest.current) { setRepos(result); setLoadState({ pending: false, error: '' }); }
+    } catch (e) {
+      if (request === loadRequest.current) setLoadState({ pending: false, error: e.message });
+    }
+  }, []);
   useEffect(() => {
     load();
-    api.products().then(setProducts).catch(() => {});
-  }, []);
+    api.products().then(setProducts).catch((e) => setErr(`Product options: ${e.message}`));
+  }, [load]);
 
   const create = async (e) => {
     e.preventDefault(); setErr('');
@@ -166,9 +180,11 @@ export default function RepositoriesPage() {
 
   return (
     <div>
-      <div className="page-head"><h2>📚 Repositories</h2></div>
-      {err && <div className="error">{err}</div>}
-      {msg && <div className="hint">{msg}</div>}
+      <PageHeader title={getPageContext("/repositories").title} description={getPageContext("/repositories").description} />
+      {loadState.pending && <FeedbackState kind="loading" title="Loading repositories…" compact />}
+      {loadState.error && <FeedbackState kind="error" title="Unable to load repositories" description={loadState.error} action={<button onClick={load}>Retry</button>} />}
+      {err && <FeedbackState kind="error" title="Request failed" description={err} />}
+      {msg && <p className="hint" role="status">{msg}</p>}
 
       <form className="inline-form" onSubmit={create}>
         <input placeholder="name (e.g. Master-BE)" required value={form.name}
@@ -210,7 +226,7 @@ export default function RepositoriesPage() {
               {renderRepoRows(list)}
             </>
           ))}
-          {repos.length === 0 && <tr><td colSpan="8" className="empty">No repositories yet.</td></tr>}
+          {!loadState.pending && !loadState.error && repos.length === 0 && <tr><td colSpan="8" className="empty">No repositories yet.</td></tr>}
         </tbody>
       </table>
 

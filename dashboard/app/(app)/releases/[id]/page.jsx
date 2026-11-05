@@ -1,5 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import PageHeader from '@/components/PageHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import { getPageContext } from '@/lib/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 import { ChannelBadge } from '../page';
@@ -43,10 +46,21 @@ export default function ReleaseDetailPage() {
   const [showHistory, setShowHistory] = useState(false);
   const [statusHistory, setStatusHistory] = useState([]);
 
-  const load = () => api.release(id).then(setRel).catch((e) => setErr(e.message));
-  const loadApprovals = () => api.releaseApprovals(id).then(setApprovals).catch(() => {});
-  const loadStatus = () => api.releaseStatus(id).then(setStatus).catch(() => {});
-  const loadRecurring = () => api.recurringDeployments(id).then(setRecurring).catch(() => {});
+  const [loadState, setLoadState] = useState({ pending: true, error: '' });
+  const loadRequest = useRef(0);
+  const load = useCallback(async () => {
+    const request = ++loadRequest.current;
+    setLoadState({ pending: true, error: '' });
+    try {
+      const result = await api.release(id);
+      if (request === loadRequest.current) { setRel(result); setLoadState({ pending: false, error: '' }); }
+    } catch (e) {
+      if (request === loadRequest.current) setLoadState({ pending: false, error: e.message });
+    }
+  }, [id]);
+  const loadApprovals = useCallback(() => api.releaseApprovals(id).then(setApprovals).catch(() => {}), [id]);
+  const loadStatus = useCallback(() => api.releaseStatus(id).then(setStatus).catch(() => {}), [id]);
+  const loadRecurring = useCallback(() => api.recurringDeployments(id).then(setRecurring).catch(() => {}), [id]);
   useEffect(() => {
     load();
     loadApprovals();
@@ -56,7 +70,7 @@ export default function ReleaseDetailPage() {
     api.repositories().then(setRepos).catch(() => {});
     api.channels().then(setChannels).catch(() => {});
     api.servers().then(setServers).catch(() => {});
-  }, [id]);
+  }, [id, load, loadApprovals, loadStatus, loadRecurring]);
 
   // Admin-only: the /users list (needed for the delegate-to picker) is admin-gated.
   useEffect(() => {
@@ -162,7 +176,8 @@ export default function ReleaseDetailPage() {
     try { await api.deleteRecurringDeployment(rule.id); loadRecurring(); } catch (e2) { setErr(e2.message); }
   };
 
-  if (!rel) return <div>{err ? <div className="error">{err}</div> : 'Loading…'}</div>;
+  if (!rel) return <div><PageHeader title="Release details" breadcrumbs={[{ label: 'Releases', href: '/releases' }, { label: 'Release details' }]} />
+    <FeedbackState kind={loadState.error ? 'error' : loadState.pending ? 'loading' : 'empty'} title={loadState.error ? 'Unable to load release' : loadState.pending ? 'Loading release…' : 'Release unavailable'} description={loadState.error || undefined} action={<button onClick={load}>Retry</button>} /></div>;
 
   const isDraft = rel.status === 'draft';
 
@@ -185,12 +200,13 @@ export default function ReleaseDetailPage() {
 
   return (
     <div>
-      <div className="page-head">
-        <h2>🚀 {rel.version} {rel.name && <span style={{ color: 'var(--muted)' }}>— {rel.name}</span>}</h2>
-        <ChannelBadge status={rel.status} />
-      </div>
-      {err && <div className="error">{err}</div>}
-      {msg && <div className="hint">{msg}</div>}
+      <PageHeader title={`${rel.version}${rel.name ? ` — ${rel.name}` : ''}`} description={getPageContext('/releases/[id]').description}
+        breadcrumbs={[{ label: 'Releases', href: '/releases' }, { label: rel.version }]}
+        actions={<ChannelBadge status={rel.status} />} />
+      {loadState.pending && <FeedbackState kind="loading" title="Loading release…" compact />}
+      {loadState.error && <FeedbackState kind="error" title="Unable to load release" description={loadState.error} action={<button onClick={load}>Retry</button>} />}
+      {err && <FeedbackState kind="error" title="Request failed" description={err} />}
+      {msg && <p className="hint" role="status">{msg}</p>}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, marginBottom: 4 }}>
         <span style={{ color: 'var(--muted)' }}>📅 Planned date:</span>
@@ -216,7 +232,7 @@ export default function ReleaseDetailPage() {
         {status?.workflow && <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--muted)', fontWeight: 400 }}>({status.workflow})</span>}
       </h3>
       {status && (
-        <div className="card">
+        <div className="ui-surface">
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 10 }}>
             <span style={{ fontSize: 13, color: 'var(--muted)' }}>Current:</span>
             <ChannelBadge status={status.current?.key || rel.status} />
@@ -329,7 +345,7 @@ export default function ReleaseDetailPage() {
         )
       )}
       {isAdmin && approvals && approvals.required_count > 0 && (
-        <div className="card" style={{ marginTop: 10 }}>
+        <div className="ui-surface" style={{ marginTop: 10 }}>
           <h4 style={{ marginTop: 0 }}>Delegate an approver&apos;s sign-off</h4>
           <form className="inline-form" onSubmit={(e) => { e.preventDefault(); guard(async () => {
             const fromUser = approvals.approvers.find((a) => a.email === delegateForm.from_email);
@@ -358,7 +374,7 @@ export default function ReleaseDetailPage() {
         </div>
       )}
       {myApproval && (
-        <div className="card" style={{ marginTop: 10 }}>
+        <div className="ui-surface" style={{ marginTop: 10 }}>
           <h4 style={{ marginTop: 0 }}>Your sign-off ({myApproval.role_label})
             {myApproval.decision !== 'pending' && <span style={{ color: 'var(--muted)', fontWeight: 400 }}> — current: {myApproval.decision} (you can update)</span>}
           </h4>

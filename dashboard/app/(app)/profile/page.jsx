@@ -1,5 +1,10 @@
 'use client';
+import PageHeader from '@/components/PageHeader';
+import FormField from '@/components/ui/FormField';
+import FeedbackState from '@/components/ui/FeedbackState';
+
 import { useCallback, useEffect, useState } from 'react';
+import { getPageContext } from '@/lib/navigation';
 import { api } from '@/lib/api';
 import { startRegistration } from '@simplewebauthn/browser';
 import { Section } from '@/components/SettingsUI';
@@ -136,10 +141,7 @@ function SecuritySection() {
 export default function ProfilePage() {
   return (
     <div>
-      <div className="page-head">
-        <h2>My Profile</h2>
-        <span className="muted">Your account&apos;s sign-in security</span>
-      </div>
+      <PageHeader {...getPageContext("/profile")} />
 
       <SecuritySection />
     </div>

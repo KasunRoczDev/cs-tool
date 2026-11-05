@@ -1,5 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import PageHeader from '@/components/PageHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import { getPageContext } from '@/lib/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 
 export default function AgentUpdatesPage() {
@@ -7,6 +10,10 @@ export default function AgentUpdatesPage() {
   const [servers, setServers] = useState([]);
   const [settings, setSettings] = useState({});
   const [err, setErr] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const loadRequest = useRef(0);
   const [msg, setMsg] = useState('');
   const notify = (m) => { setMsg(m); setTimeout(() => setMsg(''), 2500); };
 
@@ -14,12 +21,20 @@ export default function AgentUpdatesPage() {
   const [pkgFile, setPkgFile] = useState(null);
   const [sigFile, setSigFile] = useState(null);
 
-  const load = () => {
-    api.agentReleases().then(setReleases).catch((e) => setErr(e.message));
-    api.servers().then(setServers).catch((e) => setErr(e.message));
-    api.getSettings().then(setSettings).catch((e) => setErr(e.message));
-  };
-  useEffect(load, []);
+  const load = useCallback(async () => {
+    const request = ++loadRequest.current;
+    setLoading(true); setLoadError('');
+    const results = await Promise.allSettled([api.agentReleases(), api.servers(), api.getSettings()]);
+    if (request !== loadRequest.current) return;
+    if (results[0].status === 'fulfilled') setReleases(results[0].value);
+    if (results[1].status === 'fulfilled') setServers(results[1].value);
+    if (results[2].status === 'fulfilled') setSettings(results[2].value);
+    const errors = results.filter((result) => result.status === 'rejected').map((result) => result.reason?.message || 'A dataset could not be loaded');
+    setLoadError(errors.join(' '));
+    setLoaded(true);
+    setLoading(false);
+  }, []);
+  useEffect(() => { load(); return () => { loadRequest.current += 1; }; }, [load]);
 
   const guard = async (fn, m) => {
     setErr(''); setMsg('');
@@ -64,9 +79,11 @@ export default function AgentUpdatesPage() {
 
   return (
     <div>
-      <div className="page-head"><h2>🛰️ Agent Updates</h2></div>
-      {err && <div className="error">{err}</div>}
-      {msg && <div className="hint">{msg}</div>}
+      <PageHeader title={getPageContext("/agent-updates").title} description={getPageContext("/agent-updates").description} />
+      {loading && <FeedbackState kind="loading" compact title={loaded ? 'Refreshing agent data…' : 'Loading agent data…'} />}
+      {loadError && <FeedbackState kind="error" title="Some agent data could not be loaded" description={loadError} action={<button onClick={load} disabled={loading}>Retry</button>} />}
+      {err && <FeedbackState kind="error" title="Request failed" description={err} />}
+      {msg && <p className="hint" role="status">{msg}</p>}
       <p className="hint" style={{ marginBottom: 16 }}>
         Publish signed monitor-agent releases; installed agents pull and
         self-apply them (download → verify signature → restart → auto
@@ -75,7 +92,7 @@ export default function AgentUpdatesPage() {
         falls inside its rollout percent.
       </p>
 
-      <div className="card" style={{ marginBottom: 16 }}>
+      <div className="ui-surface" style={{ marginBottom: 16 }}>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <input
             type="checkbox"
@@ -87,7 +104,7 @@ export default function AgentUpdatesPage() {
       </div>
 
       <h3>Publish a new release</h3>
-      <div className="card" style={{ marginBottom: 16 }}>
+      <div className="ui-surface" style={{ marginBottom: 16 }}>
         <form className="inline-form" style={{ flexWrap: 'wrap' }} onSubmit={(e) => { e.preventDefault(); publish(); }}>
           <input placeholder="version (e.g. 1.2.0)" value={form.version}
             onChange={(e) => setForm({ ...form, version: e.target.value })} style={{ width: 160 }} />
@@ -109,6 +126,8 @@ export default function AgentUpdatesPage() {
       </div>
 
       <h3>Releases</h3>
+      {loaded && !loading && !loadError && releases.length === 0 && <FeedbackState kind="empty" title="No agent releases published yet" />}
+      <div className="ui-data-table ui-data-table--scroll" role="region" aria-label="Agent releases table" tabIndex={0} style={{ maxWidth: '100%', minWidth: 0 }}>
       <table className="grid">
         <thead><tr><th>Version</th><th>Changelog</th><th>Rollout %</th><th>Active</th><th>Published</th></tr></thead>
         <tbody>
@@ -128,11 +147,14 @@ export default function AgentUpdatesPage() {
               <td>{r.created_at ? new Date(r.created_at).toLocaleString() : ''}</td>
             </tr>
           ))}
-          {releases.length === 0 && <tr><td colSpan="5" className="empty">No agent releases published yet.</td></tr>}
+          {!loading && !loadError && releases.length === 0 && <tr><td colSpan="5" className="empty">No agent releases published yet.</td></tr>}
         </tbody>
       </table>
+      </div>
 
       <h3 style={{ marginTop: 24 }}>Servers</h3>
+      {loaded && !loading && !loadError && servers.length === 0 && <FeedbackState kind="empty" title="No servers registered" />}
+      <div className="ui-data-table ui-data-table--scroll" role="region" aria-label="Server agent update table" tabIndex={0} style={{ maxWidth: '100%', minWidth: 0 }}>
       <table className="grid">
         <thead><tr><th>Server</th><th>Agent version</th><th>Update status</th><th>Last update</th><th>Excluded</th></tr></thead>
         <tbody>
@@ -150,9 +172,10 @@ export default function AgentUpdatesPage() {
               </td>
             </tr>
           ))}
-          {servers.length === 0 && <tr><td colSpan="5" className="empty">No servers registered.</td></tr>}
+          {!loading && !loadError && servers.length === 0 && <tr><td colSpan="5" className="empty">No servers registered.</td></tr>}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import PageHeader from '@/components/PageHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import { getPageContext } from '@/lib/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 
@@ -22,8 +25,19 @@ export default function ReleasesPage() {
   const [err, setErr] = useState('');
   const [form, setForm] = useState({ version: '', name: '', planned_date: '' });
 
-  const load = () => api.releases().then(setReleases).catch((e) => setErr(e.message));
-  useEffect(() => { load(); }, []);
+  const [loadState, setLoadState] = useState({ pending: true, error: '' });
+  const loadRequest = useRef(0);
+  const load = useCallback(async () => {
+    const request = ++loadRequest.current;
+    setLoadState({ pending: true, error: '' });
+    try {
+      const result = await api.releases();
+      if (request === loadRequest.current) { setReleases(result); setLoadState({ pending: false, error: '' }); }
+    } catch (e) {
+      if (request === loadRequest.current) setLoadState({ pending: false, error: e.message });
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
   const create = async (e) => {
     e.preventDefault(); setErr('');
@@ -36,8 +50,10 @@ export default function ReleasesPage() {
 
   return (
     <div>
-      <div className="page-head"><h2>🚀 Releases</h2></div>
-      {err && <div className="error">{err}</div>}
+      <PageHeader title={getPageContext("/releases").title} description={getPageContext("/releases").description} />
+      {loadState.pending && <FeedbackState kind="loading" title="Loading releases…" compact />}
+      {loadState.error && <FeedbackState kind="error" title="Unable to load releases" description={loadState.error} action={<button onClick={load}>Retry</button>} />}
+      {err && <FeedbackState kind="error" title="Request failed" description={err} />}
 
       <form className="inline-form" onSubmit={create}>
         <input placeholder="version (e.g. 1.7.0)" required value={form.version}
@@ -66,7 +82,7 @@ export default function ReleasesPage() {
               <td><Link href={`/releases/${r.id}`}><button>Open</button></Link></td>
             </tr>
           ))}
-          {releases.length === 0 && <tr><td colSpan="8" className="empty">No releases yet.</td></tr>}
+          {!loadState.pending && !loadState.error && releases.length === 0 && <tr><td colSpan="8" className="empty">No releases yet.</td></tr>}
         </tbody>
       </table>
       <p className="hint" style={{ marginTop: 16 }}>

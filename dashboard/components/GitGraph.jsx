@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
+import FeedbackState from '@/components/ui/FeedbackState';
 import { api } from '@/lib/api';
 
 /**
@@ -120,30 +121,31 @@ export default function GitGraph({ repo, onClose }) {
       position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
       display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50,
     }} onClick={onClose}>
-      <div className="card" style={{
+      <div className="card" role="dialog" aria-modal="true" aria-labelledby="git-graph-title" onClick={(e) => e.stopPropagation()} style={{
         width: 'min(900px, 94vw)', maxHeight: '88vh', overflow: 'hidden',
         display: 'flex', flexDirection: 'column', padding: 0,
-      }} onClick={(e) => e.stopPropagation()}>
+      }}>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 12, padding: '14px 18px',
           borderBottom: '1px solid var(--border,#2a2f3a)',
         }}>
-          <h3 style={{ margin: 0 }}>🌿 {repo.name}</h3>
-          <select value={branch} onChange={(e) => setBranch(e.target.value)}>
+          <h3 id="git-graph-title" style={{ margin: 0 }}>Commit graph — {repo.name}</h3>
+          <label>Branch<select value={branch} onChange={(e) => setBranch(e.target.value)}>
             {branches.length === 0 && <option value={branch}>{branch}</option>}
             {branches.map((b) => (
               <option key={b.name} value={b.name}>
                 {b.name}{b.protected ? ' 🔒' : ''}
               </option>
             ))}
-          </select>
+          </select></label>
           <span style={{ color: 'var(--muted)', fontSize: 12 }}>
             {loading ? 'loading…' : `${commits.length} commits`}
           </span>
           <button style={{ marginLeft: 'auto' }} onClick={onClose}>Close</button>
         </div>
 
-        {err && <div className="error" style={{ margin: 14 }}>{err}</div>}
+        {err && <FeedbackState kind="error" compact title="Unable to load repository history" description={err} />}
+        {!loading && !err && branches.length === 0 && <FeedbackState kind="empty" compact title="No branches found" />}
 
         <div style={{ overflow: 'auto', display: 'flex' }}>
           <svg width={graphW} height={svgH} style={{ flex: '0 0 auto' }}>

@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import FeedbackState from '@/components/ui/FeedbackState';
 import { api } from '@/lib/api';
 import { getRole } from '@/lib/api';
 
@@ -14,6 +15,7 @@ export default function BranchManager({ repo, onClose }) {
   const [err, setErr] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // create
   const [newBranch, setNewBranch] = useState({ name: '', from: repo.default_branch || 'main' });
@@ -25,11 +27,11 @@ export default function BranchManager({ repo, onClose }) {
   const [historyBranch, setHistoryBranch] = useState('');
   const [history, setHistory] = useState(null);
 
-  const load = () => {
-    setErr('');
-    api.repoBranches(repo.id).then(setBranches).catch((e) => setErr(e.message));
-  };
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [repo.id]);
+  const load = useCallback(() => {
+    setErr(''); setLoading(true);
+    api.repoBranches(repo.id).then(setBranches).catch((e) => setErr(e.message)).finally(() => setLoading(false));
+  }, [repo.id]);
+  useEffect(() => { load(); }, [load]);
 
   const create = async (e) => {
     e.preventDefault(); setErr(''); setMsg(''); setBusy(true);
@@ -68,33 +70,36 @@ export default function BranchManager({ repo, onClose }) {
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-card" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 820 }}>
+      <div className="modal-card" role="dialog" aria-modal="true" aria-labelledby="branch-manager-title" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 820, maxHeight: '90vh', overflow: 'auto' }}>
         <div className="modal-head">
-          <h3>🌿 Branches — {repo.name}</h3>
-          <button className="x" onClick={onClose}>✕</button>
+          <h3 id="branch-manager-title">Branches — {repo.name}</h3>
+          <button className="x" aria-label="Close branch manager" onClick={onClose}>Close</button>
         </div>
 
         {!repo.has_token && (
           <div className="hint">This repo has no GitHub token set. Branch operations require one.</div>
         )}
-        {err && <div className="error">{err}</div>}
-        {msg && <div className="hint">{msg}</div>}
+        {loading && <FeedbackState kind="loading" compact title="Loading branches…" />}
+        {err && <FeedbackState kind="error" compact title="Branch operation failed" description={err} action={!loading && branches.length === 0 ? <button onClick={load}>Retry</button> : undefined} />}
+        {msg && <p className="hint" role="status">{msg}</p>}
 
         {/* Create */}
         {canWrite && (
           <form className="inline-form" onSubmit={create} style={{ marginBottom: 12 }}>
-            <input placeholder="new branch (feature/x)" required value={newBranch.name}
+            <label>New branch<input placeholder="feature/example" required value={newBranch.name}
               onChange={(e) => setNewBranch({ ...newBranch, name: e.target.value })} />
-            <input placeholder="from ref" style={{ width: 140 }} value={newBranch.from}
+            </label>
+            <label>Starting ref<input placeholder="main" style={{ width: 140 }} value={newBranch.from}
               onChange={(e) => setNewBranch({ ...newBranch, from: e.target.value })} />
+            </label>
             <button type="submit" disabled={busy}>Create branch</button>
           </form>
         )}
 
         {/* Branch list */}
         <div className="branch-list">
-          {branches.length === 0 ? <span className="empty">No branches loaded.</span> : (
-            <table className="grid">
+          {branches.length === 0 ? !loading && !err && <FeedbackState kind="empty" title="No branches found" /> : (
+            <div className="ui-data-table ui-data-table--scroll" role="region" aria-label="Repository branches" tabIndex={0} style={{ maxWidth: '100%', minWidth: 0 }}><table className="grid">
               <thead><tr><th>Branch</th><th>Tip</th><th></th></tr></thead>
               <tbody>
                 {branches.map((b) => (
@@ -114,7 +119,7 @@ export default function BranchManager({ repo, onClose }) {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           )}
         </div>
 

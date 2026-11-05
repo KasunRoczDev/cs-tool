@@ -1,11 +1,10 @@
 import Breadcrumbs from './Breadcrumbs';
 
-export default function PageHeader({ workspace, title, description, breadcrumbs, actions, wide = false }) {
+export default function PageHeader({ title, description, breadcrumbs, actions, wide = false }) {
   return (
     <header className={`page-header${wide ? ' page-header--wide' : ''}`}>
-      {(workspace || breadcrumbs?.length > 0) && (
+      {breadcrumbs?.length > 0 && (
         <div className="page-header-context">
-          {workspace && <span className="page-header-workspace">{workspace}</span>}
           <Breadcrumbs items={breadcrumbs} />
         </div>
       )}

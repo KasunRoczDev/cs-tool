@@ -1,5 +1,12 @@
 'use client';
-import { useEffect, useState } from 'react';
+import FilterBar from '@/components/ui/FilterBar';
+
+import PageHeader from '@/components/PageHeader';
+import FormField from '@/components/ui/FormField';
+import FeedbackState from '@/components/ui/FeedbackState';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { getPageContext } from '@/lib/navigation';
 import { api } from '@/lib/api';
 
 export default function BillingHistoryPage() {
@@ -9,8 +16,20 @@ export default function BillingHistoryPage() {
   const [filters, setFilters] = useState({ product_id: '', service_type_id: '', from: '', to: '' });
   const [err, setErr] = useState('');
 
-  const load = () => api.billingRecords(filters).then(setRecords).catch((e) => setErr(e.message));
-  useEffect(() => { load(); }, [filters.product_id, filters.service_type_id, filters.from, filters.to]);
+  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState('');
+  const request = useRef(0);
+  const load = useCallback(async () => {
+    const current = ++request.current;
+    setLoading(true); setLoadError('');
+    try {
+      const result = await api.billingRecords(filters);
+      if (current === request.current) { setRecords(result); setLoaded(true); }
+    } catch (e) { if (current === request.current) setLoadError(e.message); }
+    finally { if (current === request.current) setLoading(false); }
+  }, [filters]);
+  useEffect(() => { load(); return () => { request.current += 1; }; }, [load]);
   useEffect(() => {
     api.products().then(setProducts).catch(() => {});
     api.serviceTypes().then(setTypes).catch(() => {});
@@ -27,28 +46,29 @@ export default function BillingHistoryPage() {
 
   return (
     <div>
-      <div className="page-head">
-        <h2>📜 Billing History</h2>
-        <button onClick={exportCsv}>Export CSV</button>
-      </div>
-      {err && <div className="error">{err}</div>}
+      <PageHeader {...getPageContext("/billing/history")} actions={<button onClick={exportCsv}>Export CSV</button>} />
+      {err && <FeedbackState kind="error" compact title="Request failed" description={err} />}
 
-      <div className="inline-form" style={{ marginBottom: 16 }}>
-        <select value={filters.product_id} onChange={(e) => setFilters({ ...filters, product_id: e.target.value })}>
+      <FilterBar label="Billing history filters">
+        <FormField label="Project"><select value={filters.product_id} onChange={(e) => setFilters({ ...filters, product_id: e.target.value })}>
           <option value="">— all projects —</option>
           {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-        <select value={filters.service_type_id} onChange={(e) => setFilters({ ...filters, service_type_id: e.target.value })}>
+        </select></FormField>
+        <FormField label="Service type"><select value={filters.service_type_id} onChange={(e) => setFilters({ ...filters, service_type_id: e.target.value })}>
           <option value="">— all types —</option>
           {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-        </select>
-        <input type="month" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} />
-        <input type="month" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} />
-      </div>
+        </select></FormField>
+        <FormField label="From"><input type="month" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} /></FormField>
+        <FormField label="To"><input type="month" value={filters.to} onChange={(e) => setFilters({ ...filters, to: e.target.value })} /></FormField>
+      </FilterBar>
 
-      <table className="grid">
+      {loading && <FeedbackState kind="loading" compact title={loaded ? 'Refreshing…' : 'Loading…'} />}
+      {loadError && <FeedbackState kind="error" compact description={loadError} action={<button onClick={load}>Retry</button>} />}
+      {loaded && !loading && !loadError && records.length === 0 && <FeedbackState kind="empty" title="No results" description="Try another filter or add a record to get started." />}
+      <div className="ui-data-table ui-data-table--scroll" aria-busy={loading} role="region" aria-label="History table 1" tabIndex={0} style={{ maxWidth: '100%', minWidth: 0 }}>
+<table className="grid">
         <thead>
-          <tr><th>Month</th><th>Project</th><th>Service</th><th>Type</th><th>Amount</th><th>Notes</th><th></th></tr>
+          <tr><th>Month</th><th>Project</th><th>Service</th><th>Type</th><th>Amount</th><th>Notes</th><th>Actions</th></tr>
         </thead>
         <tbody>
           {records.map((r) => (
@@ -64,6 +84,7 @@ export default function BillingHistoryPage() {
           ))}
         </tbody>
       </table>
+</div>
     </div>
   );
 }

@@ -1,5 +1,10 @@
 'use client';
-import { useEffect, useState } from 'react';
+import PageHeader from '@/components/PageHeader';
+import FormField from '@/components/ui/FormField';
+import FeedbackState from '@/components/ui/FeedbackState';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { getPageContext } from '@/lib/navigation';
 import { api } from '@/lib/api';
 
 const TYPE_COLORS = {
@@ -10,18 +15,29 @@ export default function AuditLogPage() {
   const [releases, setReleases] = useState([]);
   const [rows, setRows] = useState([]);
   const [err, setErr] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
+  const requestId = useRef(0);
   const [filters, setFilters] = useState({ release_id: '', type: '', from: '', to: '' });
 
   useEffect(() => { api.releases().then(setReleases).catch(() => {}); }, []);
 
-  const load = () => api.auditLog({
-    release_id: filters.release_id || undefined,
-    type: filters.type || undefined,
-    from: filters.from ? new Date(filters.from).toISOString() : undefined,
-    to: filters.to ? new Date(filters.to).toISOString() : undefined,
-  }).then(setRows).catch((e) => setErr(e.message));
+  const load = useCallback(async () => {
+    const current = ++requestId.current;
+    setLoading(true); setErr('');
+    try {
+      const result = await api.auditLog({
+        release_id: filters.release_id || undefined,
+        type: filters.type || undefined,
+        from: filters.from ? new Date(filters.from).toISOString() : undefined,
+        to: filters.to ? new Date(filters.to).toISOString() : undefined,
+      });
+      if (current === requestId.current) { setRows(result); setLoaded(true); }
+    } catch (e) { if (current === requestId.current) setErr(e.message); }
+    finally { if (current === requestId.current) setLoading(false); }
+  }, [filters]);
 
-  useEffect(() => { load(); }, [filters]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); return () => { requestId.current += 1; }; }, [load]);
 
   const exportCsv = async () => {
     setErr('');
@@ -37,8 +53,10 @@ export default function AuditLogPage() {
 
   return (
     <div>
-      <div className="page-head"><h2>🧾 Audit Log</h2></div>
-      {err && <div className="error">{err}</div>}
+      <PageHeader {...getPageContext("/audit-log")} />
+      {loading && <FeedbackState kind="loading" compact title={loaded ? 'Refreshing audit events…' : 'Loading audit events…'} />}
+      {err && <FeedbackState kind="error" compact title="Unable to load audit events" description={err} action={<button onClick={load} disabled={loading}>Retry</button>} />}
+      {loaded && !loading && !err && rows.length === 0 && <FeedbackState kind="empty" title="No audit events" description="No events match the selected filters." />}
       <p className="hint" style={{ marginBottom: 16 }}>
         A unified, read-only timeline over release status transitions, deployment
         status transitions, approval decisions, and account actions — each already
@@ -49,17 +67,17 @@ export default function AuditLogPage() {
       </p>
 
       <div className="inline-form" style={{ marginBottom: 16 }}>
-        <select value={filters.release_id} onChange={(e) => setFilters({ ...filters, release_id: e.target.value })}>
+        <FormField label="Release"><select value={filters.release_id} onChange={(e) => setFilters({ ...filters, release_id: e.target.value })}>
           <option value="">— all releases —</option>
           {releases.map((r) => <option key={r.id} value={r.id}>{r.version}</option>)}
-        </select>
-        <select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })}>
+        </select></FormField>
+        <FormField label="Event type"><select value={filters.type} onChange={(e) => setFilters({ ...filters, type: e.target.value })}>
           <option value="">— all types —</option>
           <option value="release_status">release status</option>
           <option value="deployment">deployment</option>
           <option value="approval">approval</option>
           <option value="account">account</option>
-        </select>
+        </select></FormField>
         <label style={{ fontSize: 12, color: 'var(--muted)' }}>from
           <input type="date" value={filters.from} onChange={(e) => setFilters({ ...filters, from: e.target.value })} style={{ display: 'block' }} />
         </label>
@@ -69,7 +87,8 @@ export default function AuditLogPage() {
         <button onClick={exportCsv}>⬇ Export CSV</button>
       </div>
 
-      <table className="grid">
+      <div className="ui-data-table ui-data-table--scroll" role="region" aria-label="Audit log table 1" tabIndex={0} style={{ maxWidth: '100%', minWidth: 0 }}>
+<table className="grid">
         <thead><tr><th>When</th><th>Type</th><th>Release/Subject</th><th>Summary</th><th>Actor</th><th>Note</th></tr></thead>
         <tbody>
           {rows.map((r) => (
@@ -87,9 +106,10 @@ export default function AuditLogPage() {
               <td style={{ fontSize: 12, color: 'var(--muted)' }}>{r.note || '—'}</td>
             </tr>
           ))}
-          {rows.length === 0 && <tr><td colSpan="6" className="empty">No audit events match these filters.</td></tr>}
+          {loaded && !loading && !err && rows.length === 0 && <tr><td colSpan="6" className="empty">No audit events match these filters.</td></tr>}
         </tbody>
       </table>
+</div>
     </div>
   );
 }

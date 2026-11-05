@@ -1,5 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import PageHeader from '@/components/PageHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import { getPageContext } from '@/lib/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 
 const CATEGORIES = ['draft', 'stage', 'terminal'];
@@ -19,11 +22,22 @@ export default function ReleaseWorkflowsPage() {
   const [newStatus, setNewStatus] = useState({ key: '', name: '', rank: 0, category: 'stage', channel_key: '', color: '#3b82f6' });
   const [newTransition, setNewTransition] = useState({ from_status_key: '', to_status_key: '', kind: 'forward', require_approval: true, auto_deploy: false });
 
-  const loadWorkflows = () => api.workflows().then(setWorkflows).catch((e) => setErr(e.message));
+  const [loadWorkflowsState, setLoadWorkflowsState] = useState({ pending: true, error: '' });
+  const loadWorkflowsRequest = useRef(0);
+  const loadWorkflows = useCallback(async () => {
+    const request = ++loadWorkflowsRequest.current;
+    setLoadWorkflowsState({ pending: true, error: '' });
+    try {
+      const result = await api.workflows();
+      if (request === loadWorkflowsRequest.current) { setWorkflows(result); setLoadWorkflowsState({ pending: false, error: '' }); }
+    } catch (e) {
+      if (request === loadWorkflowsRequest.current) setLoadWorkflowsState({ pending: false, error: e.message });
+    }
+  }, []);
   useEffect(() => {
     loadWorkflows();
     api.products().then(setProducts).catch(() => {});
-  }, []);
+  }, [loadWorkflows]);
 
   const loadDetail = (id) => api.workflowDetail(id).then(setDetail).catch((e) => setErr(e.message));
   const select = (id) => { setSelectedId(id); setErr(''); loadDetail(id); };
@@ -78,9 +92,11 @@ export default function ReleaseWorkflowsPage() {
 
   return (
     <div>
-      <div className="page-head"><h2>🧭 Release Workflow Configuration</h2></div>
-      {err && <div className="error">{err}</div>}
-      {msg && <div className="hint">{msg}</div>}
+      <PageHeader title={getPageContext("/release-workflows").title} description={getPageContext("/release-workflows").description} />
+      {loadWorkflowsState.pending && <FeedbackState kind="loading" title="Loading workflows…" compact />}
+      {loadWorkflowsState.error && <FeedbackState kind="error" title="Unable to load workflows" description={loadWorkflowsState.error} action={<button onClick={loadWorkflows}>Retry</button>} />}
+      {err && <FeedbackState kind="error" title="Request failed" description={err} />}
+      {msg && <p className="hint" role="status">{msg}</p>}
       <p className="hint" style={{ marginBottom: 16 }}>
         Each product can have its own release status workflow instead of the seeded default
         (draft → canary → beta → production → enterprise → archived). Adding a status
@@ -88,9 +104,9 @@ export default function ReleaseWorkflowsPage() {
         roles can be granted access to use it on the Access Control page.
       </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: 16, alignItems: 'start' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: 16, alignItems: 'start' }}>
         {/* Workflow list */}
-        <div className="card">
+        <div className="ui-surface">
           <h4 style={{ marginTop: 0 }}>Workflows</h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
             {workflows.map((w) => (
@@ -104,7 +120,7 @@ export default function ReleaseWorkflowsPage() {
                 <div style={{ fontSize: 12, color: 'var(--muted)' }}>{w.product_name || 'global'} · {w.statuses.length} statuses</div>
               </button>
             ))}
-            {workflows.length === 0 && <p className="empty">No workflows yet.</p>}
+            {!loadWorkflowsState.pending && !loadWorkflowsState.error && workflows.length === 0 && <p className="empty">No workflows yet.</p>}
           </div>
           <h5 style={{ marginBottom: 6 }}>New workflow</h5>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -122,7 +138,7 @@ export default function ReleaseWorkflowsPage() {
           <p className="empty">Select a workflow to edit its statuses and transitions.</p>
         ) : (
           <div>
-            <div className="card" style={{ marginBottom: 16 }}>
+            <div className="ui-surface" style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ margin: 0 }}>{detail.name} <span style={{ fontSize: 13, color: 'var(--muted)', fontWeight: 400 }}>— {detail.product_name || 'global'}</span></h3>
                 {!detail.is_default && (

@@ -1,21 +1,20 @@
 'use client';
+import MetricCard from '@/components/ui/MetricCard';
+import FilterBar from '@/components/ui/FilterBar';
+
+import PageHeader from '@/components/PageHeader';
+import FormField from '@/components/ui/FormField';
+import FeedbackState from '@/components/ui/FeedbackState';
+
 import { useEffect, useState } from 'react';
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from 'recharts';
+import { getPageContext } from '@/lib/navigation';
 import { api } from '@/lib/api';
 
 const COLORS = ['#4f9dff', '#22c55e', '#f59e0b', '#ef4444', '#a855f7', '#14b8a6', '#eab308', '#ec4899'];
 
-function StatTile({ title, value, sub }) {
-  return (
-    <div className="card" style={{ flex: '1 1 220px' }}>
-      <h4 style={{ margin: 0 }}>{title}</h4>
-      <div style={{ fontSize: 28, fontWeight: 700, marginTop: 8 }}>{value}</div>
-      {sub && <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 4 }}>{sub}</div>}
-    </div>
-  );
-}
 
 const FLAG_LABEL = {
   downsizing_candidate: 'Downsizing candidate',
@@ -57,21 +56,34 @@ export default function BillingDashboardPage() {
   const [insights, setInsights] = useState([]);
   const [products, setProducts] = useState([]);
   const [err, setErr] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [retry, setRetry] = useState(0);
+  const [insightState, setInsightState] = useState('loading');
+  const [insightError, setInsightError] = useState('');
+  const [lookupError, setLookupError] = useState('');
   const [scope, setScope] = useState('month');
   const [month, setMonth] = useState(currentMonthStr());
   const [productId, setProductId] = useState('');
 
-  useEffect(() => { api.products().then(setProducts).catch(() => {}); }, []);
+  useEffect(() => { api.products().then(setProducts).catch((e) => setLookupError(e.message)); }, [retry]);
 
   useEffect(() => {
+    let active = true;
+    setLoading(true); setErr('');
     api.billingDashboardSummary(6, scope, `${month}-01`, productId || undefined)
-      .then(setSummary).catch((e) => setErr(e.message));
-  }, [scope, month, productId]);
+      .then((value) => { if (active) setSummary(value); }).catch((e) => { if (active) setErr(e.message); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [scope, month, productId, retry]);
   useEffect(() => {
-    api.billingInsights().then(setInsights).catch(() => {});
-  }, []);
+    let active = true;
+    setInsightState('loading'); setInsightError('');
+    api.billingInsights().then((value) => { if (active) { setInsights(value); setInsightState('content'); } })
+      .catch((e) => { if (active) { setInsightError(e.message); setInsightState('error'); } });
+    return () => { active = false; };
+  }, [retry]);
 
-  if (err) return <div className="error">{err}</div>;
+
 
   const fmt = (n) => summary && `${summary.currency} ${Number(n).toFixed(2)}`;
   const showMonthlyByProject = summary && summary.period !== 'month';
@@ -79,63 +91,65 @@ export default function BillingDashboardPage() {
 
   return (
     <div>
-      <div className="page-head"><h2>💰 Billing Dashboard</h2></div>
+      <PageHeader {...getPageContext("/billing/dashboard")} />
 
-      <div className="inline-form" style={{ marginBottom: 16 }}>
-        <input type="month" value={month} disabled={scope === 'all'}
-          onChange={(e) => setMonth(e.target.value)} />
-        <select value={scope} onChange={(e) => setScope(e.target.value)}>
+      <FilterBar label="Billing period and project">
+        <FormField label="Billing month"><input type="month" value={month} disabled={scope === 'all'}
+          onChange={(e) => setMonth(e.target.value)} /></FormField>
+        <FormField label="Period"><select value={scope} onChange={(e) => setScope(e.target.value)}>
           <option value="month">This Month</option>
           <option value="year">This Year</option>
           <option value="all">All Time</option>
-        </select>
-        <select value={productId} onChange={(e) => setProductId(e.target.value)}>
+        </select></FormField>
+        <FormField label="Project"><select value={productId} onChange={(e) => setProductId(e.target.value)}>
           <option value="">— all projects —</option>
           {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-        </select>
-      </div>
-
-      {!summary ? <p>Loading…</p> : (
+        </select></FormField>
+      </FilterBar>
+      {lookupError && <FeedbackState kind="error" compact title="Projects unavailable" description={lookupError} action={<button onClick={() => { setLookupError(''); setRetry((n) => n + 1); }}>Retry</button>} />}
+      {err && <FeedbackState kind="error" title="Billing summary unavailable" description={err} action={<button onClick={() => setRetry((n) => n + 1)}>Retry</button>} />}
+      {loading && <FeedbackState kind="loading" compact title="Loading billing summary…" />}
+      {!loading && !err && summary && (
         <>
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
-            <StatTile title={periodLabel(summary)} value={fmt(summary.period_total)} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 16, marginBottom: 20 }}>
+            <MetricCard label={periodLabel(summary)} value={fmt(summary.period_total)} />
             {productId ? (
-              <StatTile title="Avg per month"
+              <MetricCard label="Avg per month"
                 value={summary.trend.length ? fmt(summary.trend.reduce((s, t) => s + t.total, 0) / summary.trend.length) : fmt(0)}
-                sub={`Across ${summary.trend.length} billed month${summary.trend.length === 1 ? '' : 's'}`} />
+                detail={`Across ${summary.trend.length} billed month${summary.trend.length === 1 ? '' : 's'}`} />
             ) : (
               <>
-                <StatTile title="Projects with spend" value={summary.by_project.length} />
-                <StatTile title="Avg per project"
+                <MetricCard label="Projects with spend" value={summary.by_project.length} />
+                <MetricCard label="Avg per project"
                   value={summary.by_project.length ? fmt(summary.period_total / summary.by_project.length) : fmt(0)} />
               </>
             )}
           </div>
 
           <div className="card" style={{ marginBottom: 20 }}>
-            <h4>Spend trend</h4>
+            <h2 style={{ fontSize: 18 }}>Spend trend</h2>
             <ResponsiveContainer width="100%" height={220}>
               <LineChart data={summary.trend} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#2a2f3a" />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9aa4b2' }} tickFormatter={(m) => m.slice(0, 7)} />
-                <YAxis tick={{ fontSize: 11, fill: '#9aa4b2' }} />
-                <Tooltip contentStyle={{ background: '#161a22', border: '1px solid #2a2f3a' }} labelStyle={{ color: '#cbd5e1' }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'var(--muted)' }} tickFormatter={(m) => m.slice(0, 7)} />
+                <YAxis tick={{ fontSize: 11, fill: 'var(--muted)' }} />
+                <Tooltip contentStyle={{ background: 'var(--panel)', color: 'var(--text)', border: '1px solid var(--border)' }} labelStyle={{ color: 'var(--text)' }} />
                 <Line type="monotone" dataKey="total" stroke="#4f9dff" strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
             {summary.trend.length === 0 && <p className="empty">No billing records yet.</p>}
           </div>
 
-          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginBottom: 20 }}>
-            <div className="card" style={{ flex: '1 1 320px' }}>
-              <h4>By Enterprise Project{showMonthlyByProject ? ' (monthly)' : ''}</h4>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 16, marginBottom: 20 }}>
+            <div className="card" style={{ minWidth: 0 }}>
+              <h2 style={{ fontSize: 18 }}>By Enterprise Project{showMonthlyByProject ? ' (monthly)' : ''}</h2>
               {showMonthlyByProject ? (
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={projectTrend.data} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#2a2f3a" />
-                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#9aa4b2' }} tickFormatter={(m) => m.slice(0, 7)} />
-                    <YAxis tick={{ fontSize: 11, fill: '#9aa4b2' }} />
-                    <Tooltip contentStyle={{ background: '#161a22', border: '1px solid #2a2f3a' }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'var(--muted)' }} tickFormatter={(m) => m.slice(0, 7)} />
+                    <YAxis tick={{ fontSize: 11, fill: 'var(--muted)' }} />
+                    <Tooltip contentStyle={{ background: 'var(--panel)', color: 'var(--text)', border: '1px solid var(--border)' }} />
                     <Legend wrapperStyle={{ fontSize: 11 }} />
                     {projectTrend.projects.map((name, i) => (
                       <Bar key={name} dataKey={name} stackId="projects" fill={COLORS[i % COLORS.length]} />
@@ -145,37 +159,37 @@ export default function BillingDashboardPage() {
               ) : (
                 <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={summary.by_project} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#2a2f3a" />
-                    <XAxis dataKey="product_name" tick={{ fontSize: 11, fill: '#9aa4b2' }} />
-                    <YAxis tick={{ fontSize: 11, fill: '#9aa4b2' }} />
-                    <Tooltip contentStyle={{ background: '#161a22', border: '1px solid #2a2f3a' }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                    <XAxis dataKey="product_name" tick={{ fontSize: 11, fill: 'var(--muted)' }} />
+                    <YAxis tick={{ fontSize: 11, fill: 'var(--muted)' }} />
+                    <Tooltip contentStyle={{ background: 'var(--panel)', color: 'var(--text)', border: '1px solid var(--border)' }} />
                     <Bar dataKey="total" fill="#4f9dff" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}
               {summary.by_project.length === 0 && <p className="empty">No billing records for this period.</p>}
             </div>
-            <div className="card" style={{ flex: '1 1 320px' }}>
-              <h4>By Service Type</h4>
+            <div className="card" style={{ minWidth: 0 }}>
+              <h2 style={{ fontSize: 18 }}>By Service Type</h2>
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={summary.by_service_type} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2f3a" />
-                  <XAxis dataKey="service_type" tick={{ fontSize: 11, fill: '#9aa4b2' }} />
-                  <YAxis tick={{ fontSize: 11, fill: '#9aa4b2' }} />
-                  <Tooltip contentStyle={{ background: '#161a22', border: '1px solid #2a2f3a' }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="service_type" tick={{ fontSize: 11, fill: 'var(--muted)' }} />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted)' }} />
+                  <Tooltip contentStyle={{ background: 'var(--panel)', color: 'var(--text)', border: '1px solid var(--border)' }} />
                   <Bar dataKey="total" fill="#22c55e" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
               {summary.by_service_type.length === 0 && <p className="empty">No billing records for this period.</p>}
             </div>
-            <div className="card" style={{ flex: '1 1 320px' }}>
-              <h4>By Provider</h4>
+            <div className="card" style={{ minWidth: 0 }}>
+              <h2 style={{ fontSize: 18 }}>By Provider</h2>
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={summary.by_provider} margin={{ top: 5, right: 10, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#2a2f3a" />
-                  <XAxis dataKey="provider" tick={{ fontSize: 11, fill: '#9aa4b2' }} />
-                  <YAxis tick={{ fontSize: 11, fill: '#9aa4b2' }} />
-                  <Tooltip contentStyle={{ background: '#161a22', border: '1px solid #2a2f3a' }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+                  <XAxis dataKey="provider" tick={{ fontSize: 11, fill: 'var(--muted)' }} />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--muted)' }} />
+                  <Tooltip contentStyle={{ background: 'var(--panel)', color: 'var(--text)', border: '1px solid var(--border)' }} />
                   <Bar dataKey="total" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
@@ -184,11 +198,12 @@ export default function BillingDashboardPage() {
           </div>
 
           <div className="card" style={{ marginBottom: 20 }}>
-            <h4>Top Services by Cost</h4>
+            <h2 style={{ fontSize: 18 }}>Top Services by Cost</h2>
             {summary.top_services.length === 0 ? (
               <p className="empty">No billing records for this period.</p>
             ) : (
-              <table className="grid">
+              <div className="ui-data-table ui-data-table--scroll" role="region" aria-label="Dashboard table 1" tabIndex={0} style={{ maxWidth: '100%', minWidth: 0 }}>
+<table className="grid">
                 <thead><tr><th>Service</th><th>Project</th><th>Type</th><th style={{ textAlign: 'right' }}>Amount</th></tr></thead>
                 <tbody>
                   {summary.top_services.map((s) => (
@@ -201,17 +216,19 @@ export default function BillingDashboardPage() {
                   ))}
                 </tbody>
               </table>
+</div>
             )}
           </div>
         </>
       )}
 
       <div className="card">
-        <h4>Cost Insights</h4>
-        {insights.length === 0 ? (
+        <h2 style={{ fontSize: 18 }}>Cost Insights</h2>
+        {insightState === 'loading' ? <FeedbackState kind="loading" compact title="Loading cost insights…" /> : insightState === 'error' ? <FeedbackState kind="error" compact description={insightError} action={<button onClick={() => setRetry((n) => n + 1)}>Retry</button>} /> : insights.length === 0 ? (
           <p className="empty">No cost flags — nothing looks obviously oversized or unused.</p>
         ) : (
-          <table className="grid">
+          <div className="ui-data-table ui-data-table--scroll" role="region" aria-label="Dashboard table 2" tabIndex={0} style={{ maxWidth: '100%', minWidth: 0 }}>
+<table className="grid">
             <thead><tr><th>Service</th><th>Server</th><th>Flag</th><th>Avg CPU</th><th>Avg RAM</th><th>Amount</th><th>Reason</th></tr></thead>
             <tbody>
               {insights.map((f) => (
@@ -227,6 +244,7 @@ export default function BillingDashboardPage() {
               ))}
             </tbody>
           </table>
+</div>
         )}
       </div>
     </div>

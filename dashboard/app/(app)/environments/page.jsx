@@ -1,5 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import PageHeader from '@/components/PageHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import { getPageContext } from '@/lib/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '@/lib/api';
 
 export default function EnvironmentsPage() {
@@ -21,12 +24,23 @@ export default function EnvironmentsPage() {
 
   const isAdmin = me?.role === 'admin';
 
-  const loadChannels = () => api.channels().then(setChannels).catch((e) => setErr(e.message));
+  const [loadChannelsState, setLoadChannelsState] = useState({ pending: true, error: '' });
+  const loadChannelsRequest = useRef(0);
+  const loadChannels = useCallback(async () => {
+    const request = ++loadChannelsRequest.current;
+    setLoadChannelsState({ pending: true, error: '' });
+    try {
+      const result = await api.channels();
+      if (request === loadChannelsRequest.current) { setChannels(result); setLoadChannelsState({ pending: false, error: '' }); }
+    } catch (e) {
+      if (request === loadChannelsRequest.current) setLoadChannelsState({ pending: false, error: e.message });
+    }
+  }, []);
   useEffect(() => {
     loadChannels();
     api.products().then(setProducts).catch(() => {});
     api.me().then(setMe).catch(() => {});
-  }, []);
+  }, [loadChannels]);
 
   const loadVars = (channelId) => api.channelEnvVars(channelId).then(setVars).catch((e) => setErr(e.message));
   const select = (ch) => { setSelected(ch); setErr(''); loadVars(ch.id); };
@@ -68,9 +82,12 @@ export default function EnvironmentsPage() {
 
   return (
     <div>
-      <div className="page-head"><h2>🌐 Environments</h2></div>
-      {err && <div className="error">{err}</div>}
-      {msg && <div className="hint">{msg}</div>}
+      <PageHeader title={getPageContext("/environments").title} description={getPageContext("/environments").description} />
+      {loadChannelsState.pending && <FeedbackState kind="loading" title="Loading channels…" compact />}
+      {loadChannelsState.error && <FeedbackState kind="error" title="Unable to load channels" description={loadChannelsState.error} action={<button onClick={loadChannels}>Retry</button>} />}
+      {!loadChannelsState.pending && !loadChannelsState.error && channels.length === 0 && <FeedbackState kind="empty" title="No channels configured" />}
+      {err && <FeedbackState kind="error" title="Request failed" description={err} />}
+      {msg && <p className="hint" role="status">{msg}</p>}
       <p className="hint" style={{ marginBottom: 16 }}>
         Per-channel environment variables and secrets, injected into the deploy
         pipeline as a <code>.env</code> file on the target server (secret values
@@ -79,8 +96,8 @@ export default function EnvironmentsPage() {
         channel blocks deploys the same way a freeze window does.
       </p>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '220px 1fr', gap: 16, alignItems: 'start' }}>
-        <div className="card">
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: 16, alignItems: 'start' }}>
+        <div className="ui-surface">
           <h4 style={{ marginTop: 0 }}>Channels</h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {channels.map((c) => (
@@ -100,7 +117,7 @@ export default function EnvironmentsPage() {
           <p className="empty">Select a channel to manage its environment.</p>
         ) : (
           <div>
-            <div className="card" style={{ marginBottom: 16 }}>
+            <div className="ui-surface" style={{ marginBottom: 16 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3 style={{ margin: 0 }}>{selected.name}</h3>
                 {isAdmin && (

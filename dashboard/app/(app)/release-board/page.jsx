@@ -1,5 +1,8 @@
 'use client';
-import { useEffect, useState } from 'react';
+import PageHeader from '@/components/PageHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import { getPageContext } from '@/lib/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 
@@ -8,13 +11,26 @@ export default function ReleaseBoardPage() {
   const [columns, setColumns] = useState([]);
   const [err, setErr] = useState('');
 
-  const load = () => api.releaseBoard().then(setColumns).catch((e) => setErr(e.message));
-  useEffect(() => { load(); }, []);
+  const [loadState, setLoadState] = useState({ pending: true, error: '' });
+  const loadRequest = useRef(0);
+  const load = useCallback(async () => {
+    const request = ++loadRequest.current;
+    setLoadState({ pending: true, error: '' });
+    try {
+      const result = await api.releaseBoard();
+      if (request === loadRequest.current) { setColumns(result); setLoadState({ pending: false, error: '' }); }
+    } catch (e) {
+      if (request === loadRequest.current) setLoadState({ pending: false, error: e.message });
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
 
   return (
     <div>
-      <div className="page-head"><h2>🗂️ Release Status Board</h2></div>
-      {err && <div className="error">{err}</div>}
+      <PageHeader title={getPageContext("/release-board").title} description={getPageContext("/release-board").description} />
+      {loadState.pending && <FeedbackState kind="loading" title="Loading release board…" compact />}
+      {loadState.error && <FeedbackState kind="error" title="Unable to load release board" description={loadState.error} action={<button onClick={load}>Retry</button>} />}
+      {err && <FeedbackState kind="error" title="Request failed" description={err} />}
       <div style={{ display: 'flex', gap: 12, overflowX: 'auto', paddingBottom: 12 }}>
         {columns.map((col) => (
           <div key={col.key} style={{ flex: '0 0 240px', minWidth: 240 }}>
@@ -37,7 +53,7 @@ export default function ReleaseBoardPage() {
             </div>
           </div>
         ))}
-        {columns.length === 0 && <p className="empty">No releases yet.</p>}
+        {!loadState.pending && !loadState.error && columns.length === 0 && <p className="empty">No releases yet.</p>}
       </div>
       <p className="hint" style={{ marginTop: 12 }}>
         Columns come from the configurable release workflow. Status changes are permission-gated

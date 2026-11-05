@@ -1,5 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
+import FormField from '@/components/ui/FormField';
+import FeedbackState from '@/components/ui/FeedbackState';
 import { api } from '@/lib/api';
 
 const ENV_OPTIONS = ['live', 'staging', 'dev', 'test'];
@@ -12,15 +14,18 @@ export default function RegisterServer({ onClose, defaultProductId = '' }) {
   const [products, setProducts] = useState([]);
   const [result, setResult] = useState(null);
   const [err, setErr] = useState('');
+  const [productsError, setProductsError] = useState('');
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    api.products().then(setProducts).catch(() => {});
+    api.products().then(setProducts).catch((e) => setProductsError(e.message || 'Unable to load projects')).finally(() => setProductsLoading(false));
   }, []);
 
   const submit = async (e) => {
     e.preventDefault();
-    setErr('');
+    setErr(''); setSaving(true);
     try {
       const r = await api.registerServer({ name, hostname, product_id: productId || undefined });
       // Environment lives in tags.env — set it right after creation if chosen.
@@ -28,9 +33,9 @@ export default function RegisterServer({ onClose, defaultProductId = '' }) {
         try { await api.updateServer(r.id, { tags: { env } }); } catch {}
       }
       setResult(r);
-    } catch {
-      setErr('Failed to register (need admin/operator role)');
-    }
+    } catch (e) {
+      setErr(e.message || 'Unable to register server');
+    } finally { setSaving(false); }
   };
 
   const copyKey = () => {
@@ -43,33 +48,35 @@ export default function RegisterServer({ onClose, defaultProductId = '' }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="register-server-title" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '90vh', overflow: 'auto' }}>
         {!result ? (
           <form onSubmit={submit}>
-            <h3>Register server</h3>
-            <label>Name<input value={name} onChange={(e) => setName(e.target.value)} required /></label>
-            <label>Hostname<input value={hostname} onChange={(e) => setHostname(e.target.value)} /></label>
-            <label>Product
-              <select value={productId} onChange={(e) => setProductId(e.target.value)}>
+            <h3 id="register-server-title">Register server</h3>
+            <FormField label="Name" required><input value={name} onChange={(e) => setName(e.target.value)} required /></FormField>
+            <FormField label="Hostname"><input value={hostname} onChange={(e) => setHostname(e.target.value)} /></FormField>
+            <FormField label="Project">
+              <select value={productId} onChange={(e) => setProductId(e.target.value)} disabled={productsLoading || !!productsError}>
                 <option value="">— unassigned —</option>
                 {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-            </label>
-            <label>Environment
+            </FormField>
+            {productsLoading && <FeedbackState kind="loading" compact title="Loading projects…" />}
+            {productsError && <FeedbackState kind="error" compact title="Projects unavailable" description={productsError} />}
+            <FormField label="Environment">
               <select value={env} onChange={(e) => setEnv(e.target.value)}>
                 <option value="">— none —</option>
                 {ENV_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
               </select>
-            </label>
-            {err && <div className="error">{err}</div>}
+            </FormField>
+            {err && <FeedbackState kind="error" compact title="Unable to register server" description={err} />}
             <div className="modal-actions">
               <button type="button" onClick={onClose}>Cancel</button>
-              <button type="submit">Create</button>
+              <button type="submit" disabled={saving || productsLoading}>{saving ? 'Creating…' : 'Create server'}</button>
             </div>
           </form>
         ) : (
           <div>
-            <h3>Server created ✅</h3>
+            <h3 id="register-server-title">Server created</h3>
             <p>Copy this API key now — it is shown only once. Put it in the agent config.</p>
             <pre className="apikey">{result.api_key}</pre>
             <button type="button" className="btn-secondary" onClick={copyKey}>

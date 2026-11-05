@@ -1,5 +1,8 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import PageHeader from '@/components/PageHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import { getPageContext } from '@/lib/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
 
@@ -28,8 +31,19 @@ export default function ReleaseCalendarPage() {
   const from = toISODate(startOfMonth(monthDate));
   const to = toISODate(endOfMonth(monthDate));
 
-  const load = () => api.releaseCalendar(from, to).then(setData).catch((e) => setErr(e.message));
-  useEffect(() => { load(); }, [from, to]);
+  const [loadState, setLoadState] = useState({ pending: true, error: '' });
+  const loadRequest = useRef(0);
+  const load = useCallback(async () => {
+    const request = ++loadRequest.current;
+    setLoadState({ pending: true, error: '' });
+    try {
+      const result = await api.releaseCalendar(from, to);
+      if (request === loadRequest.current) { setData(result); setLoadState({ pending: false, error: '' }); }
+    } catch (e) {
+      if (request === loadRequest.current) setLoadState({ pending: false, error: e.message });
+    }
+  }, [from, to]);
+  useEffect(() => { load(); }, [load]);
   useEffect(() => {
     api.me().then(setMe).catch(() => {});
     api.channels().then(setChannels).catch(() => {});
@@ -97,9 +111,12 @@ export default function ReleaseCalendarPage() {
 
   return (
     <div>
-      <div className="page-head"><h2>📅 Release Calendar</h2></div>
-      {err && <div className="error">{err}</div>}
-      {msg && <div className="hint">{msg}</div>}
+      <PageHeader title={getPageContext("/release-calendar").title} description={getPageContext("/release-calendar").description} />
+      {loadState.pending && <FeedbackState kind="loading" title="Loading calendar…" compact />}
+      {loadState.error && <FeedbackState kind="error" title="Unable to load calendar" description={loadState.error} action={<button onClick={load}>Retry</button>} />}
+      {!loadState.pending && !loadState.error && !data.releases.length && !data.deployments.length && !data.freeze_windows.length && <FeedbackState kind="empty" title="Nothing scheduled this month" compact />}
+      {err && <FeedbackState kind="error" title="Request failed" description={err} />}
+      {msg && <p className="hint" role="status">{msg}</p>}
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
         <button onClick={() => setMonthDate((d) => new Date(d.getFullYear(), d.getMonth() - 1, 1))}>◀</button>

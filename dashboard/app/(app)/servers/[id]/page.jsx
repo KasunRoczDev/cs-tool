@@ -4,7 +4,7 @@ import SectionHeader from '@/components/SectionHeader';
 import FeedbackState from '@/components/ui/FeedbackState';
 import StatusBadge from '@/components/ui/StatusBadge';
 import FormField from '@/components/ui/FormField';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { getPageContext } from '@/lib/navigation';
@@ -38,24 +38,24 @@ export default function ServerDetailPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
-  const loadServer = () => {
+  const loadServer = useCallback(() => {
     setLoading(true); setError('');
     return api.server(id).then(setServer).catch((e) => setError(e.message || 'Unable to load server')).finally(() => setLoading(false));
-  };
-  const loadMetrics = () => {
+  }, [id]);
+  const loadMetrics = useCallback(() => {
     setMetricsLoading(true); setMetricsError('');
     return api.metrics(id).then((rows) => setSeries(rows.map((r) => ({
       t: fmt(r.time), cpu: r.cpu_usage, mem: r.memory_usage, disk: r.disk_usage, net_in: r.net_in, net_out: r.net_out,
     })))).catch((e) => setMetricsError(e.message || 'Unable to load metrics')).finally(() => setMetricsLoading(false));
-  };
-  const loadEvents = () => {
+  }, [id]);
+  const loadEvents = useCallback(() => {
     setEventsLoading(true); setEventsError('');
     return api.securityEvents(id).then(setEvents).catch((e) => setEventsError(e.message || 'Unable to load events')).finally(() => setEventsLoading(false));
-  };
-  const loadHostedApps = () => {
+  }, [id]);
+  const loadHostedApps = useCallback(() => {
     setAppsLoading(true); setAppsLoadError('');
     return api.serverApps(id).then(setHostedApps).catch((e) => setAppsLoadError(e.message || 'Unable to load hosted apps')).finally(() => setAppsLoading(false));
-  };
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -85,7 +85,7 @@ export default function ServerDetailPage() {
       s.off('metric', onMetric);
       s.off('security_event', onEvent);
     };
-  }, [id]);
+  }, [id, loadEvents, loadHostedApps, loadMetrics, loadServer]);
 
 
   const linkApp = async () => {

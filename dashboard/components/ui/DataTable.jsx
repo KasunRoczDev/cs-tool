@@ -3,10 +3,10 @@ import FeedbackState from './FeedbackState';
 /**
  * columns: { key, header, render?(row, index), align? ('left'|'center'|'right'), rowHeader? }[].
  * rows: objects; rowKey: stable property name (default 'id') or (row, index) => key.
- * empty: React node; density: 'comfortable'|'compact'; responsive: 'scroll'|'wrap'.
+ * empty: React node; density: 'comfortable'|'compact'; responsive: 'scroll'|'wrap'; label: accessible name for the scroll region.
  * Scroll preserves column widths; wrap keeps a fixed-layout semantic table in its container.
  */
-export default function DataTable({ columns = [], rows = [], rowKey = 'id', empty, density = 'comfortable', responsive = 'scroll' }) {
+export default function DataTable({ columns = [], rows = [], rowKey = 'id', empty, density = 'comfortable', responsive = 'scroll', label = 'Data table' }) {
   const mode = responsive === 'wrap' ? 'wrap' : 'scroll';
   const spacing = density === 'compact' ? 'compact' : 'comfortable';
   const alignment = (column) => ['left', 'center', 'right'].includes(column.align) ? column.align : 'left';
@@ -14,7 +14,7 @@ export default function DataTable({ columns = [], rows = [], rowKey = 'id', empt
   return (
     <div className={`ui-data-table ui-data-table--${mode} ui-data-table--${spacing}`}
       role={mode === 'scroll' ? 'region' : undefined}
-      aria-label={mode === 'scroll' ? 'Scrollable data table' : undefined}
+      aria-label={mode === 'scroll' ? label : undefined}
       tabIndex={mode === 'scroll' ? 0 : undefined}>
       <table>
         <thead>

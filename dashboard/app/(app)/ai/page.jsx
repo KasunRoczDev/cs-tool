@@ -1,4 +1,7 @@
 'use client';
+import PageHeader from '@/components/PageHeader';
+import FeedbackState from '@/components/ui/FeedbackState';
+import { getPageContext } from '@/lib/navigation';
 import { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 
@@ -17,7 +20,7 @@ function ScoreBar({ score, level }) {
 
 function Section({ title, children }) {
   return (
-    <div className="card" style={{ marginBottom: 16 }}>
+    <div className="ui-surface" style={{ marginBottom: 16 }}>
       <h3 style={{ marginTop: 0 }}>{title}</h3>
       {children}
     </div>
@@ -29,6 +32,8 @@ export default function AiPage() {
   const [releases, setReleases] = useState([]);
   const [repos, setRepos] = useState([]);
   const [err, setErr] = useState('');
+  const [lookupLoading, setLookupLoading] = useState(true);
+  const [lookupError, setLookupError] = useState('');
 
   const [relId, setRelId] = useState('');
   const [channel, setChannel] = useState('production');
@@ -48,9 +53,16 @@ export default function AiPage() {
   const [busy, setBusy] = useState('');
 
   useEffect(() => {
-    api.aiStatus().then(setLlm).catch(() => {});
-    api.releases().then(setReleases).catch(() => {});
-    api.repositories().then(setRepos).catch(() => {});
+    let active = true;
+    Promise.allSettled([api.aiStatus(), api.releases(), api.repositories()]).then((results) => {
+      if (!active) return;
+      if (results[0].status === 'fulfilled') setLlm(results[0].value);
+      if (results[1].status === 'fulfilled') setReleases(results[1].value);
+      if (results[2].status === 'fulfilled') setRepos(results[2].value);
+      setLookupError(results.filter((result) => result.status === 'rejected').map((result) => result.reason?.message || 'Some options could not be loaded').join(' '));
+      setLookupLoading(false);
+    });
+    return () => { active = false; };
   }, []);
 
   const run = async (key, fn, setter) => {
@@ -60,8 +72,10 @@ export default function AiPage() {
 
   return (
     <div>
-      <div className="page-head"><h2>🤖 AI Assistant</h2></div>
-      {err && <div className="error">{err}</div>}
+      <PageHeader title={getPageContext("/ai").title} description={getPageContext("/ai").description} />
+      {lookupLoading && <FeedbackState kind="loading" compact title="Loading release and repository options…" />}
+      {lookupError && <FeedbackState kind="error" compact title="Some AI options could not be loaded" description={lookupError} />}
+      {err && <FeedbackState kind="error" title="Request failed" description={err} />}
 
       <div className="hint" style={{ marginBottom: 16 }}>
         Release intelligence computed from your own data (deployments, jobs, PRs, commits, alerts).
@@ -73,13 +87,13 @@ export default function AiPage() {
       {/* ── Release intelligence ── */}
       <Section title="📦 Release risk, failure prediction & rollback">
         <div className="inline-form" style={{ marginBottom: 12 }}>
-          <select value={relId} onChange={(e) => setRelId(e.target.value)}>
+          <label>Release<select value={relId} onChange={(e) => setRelId(e.target.value)}>
             <option value="">— select release —</option>
             {releases.map((r) => <option key={r.id} value={r.id}>{r.version}{r.name ? ` — ${r.name}` : ''}</option>)}
-          </select>
-          <select value={channel} onChange={(e) => setChannel(e.target.value)}>
+          </select></label>
+          <label>Channel<select value={channel} onChange={(e) => setChannel(e.target.value)}>
             {['canary', 'beta', 'production', 'enterprise'].map((c) => <option key={c} value={c}>{c}</option>)}
-          </select>
+          </select></label>
           <button disabled={!relId || busy} onClick={() => run('risk', () => api.aiRisk(relId, channel), setRisk)}>Estimate risk</button>
           <button disabled={!relId || busy} onClick={() => run('predict', () => api.aiPredict(relId, channel), setPredict)}>Predict failure</button>
           <button disabled={!relId || busy} onClick={() => run('plan', () => api.aiRollbackPlan(relId, channel), setPlan)}>Rollback plan</button>
@@ -127,17 +141,18 @@ export default function AiPage() {
       {/* ── PR intelligence ── */}
       <Section title="🔀 Pull request intelligence">
         <div className="inline-form" style={{ marginBottom: 12 }}>
-          <select value={repoId} onChange={(e) => { setRepoId(e.target.value); setRisky(null); }}>
+          <label>Repository<select value={repoId} onChange={(e) => { setRepoId(e.target.value); setRisky(null); }}>
             <option value="">— select repository —</option>
             {repos.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-          </select>
+          </select></label>
           <button disabled={!repoId || busy} onClick={() => run('risky', () => api.aiRiskyPrs(repoId), setRisky)}>Detect risky PRs</button>
-          <input style={{ width: 90 }} placeholder="PR #" value={prNum} onChange={(e) => setPrNum(e.target.value)} />
+          <label>Pull request number<input style={{ width: 90 }} inputMode="numeric" placeholder="PR #" value={prNum} onChange={(e) => setPrNum(e.target.value)} /></label>
           <button disabled={!repoId || !prNum || busy} onClick={() => run('rev', () => api.aiReviewers(repoId, prNum), setReviewers)}>Recommend reviewers</button>
           <button disabled={!repoId || !prNum || busy} onClick={() => run('brk', () => api.aiBreakingChanges(repoId, prNum), setBreaking)}>Detect breaking changes</button>
         </div>
 
         {risky && (
+          <div className="ui-data-table ui-data-table--scroll" role="region" aria-label="Risky pull requests" tabIndex={0} style={{ maxWidth: '100%', minWidth: 0 }}>
           <table className="grid" style={{ marginBottom: 12 }}>
             <thead><tr><th>PR</th><th>Risk</th><th>Churn</th><th>Files</th><th>Age</th><th>Why</th></tr></thead>
             <tbody>
@@ -152,6 +167,7 @@ export default function AiPage() {
               {risky.length === 0 && <tr><td colSpan={6} className="empty">No open PRs.</td></tr>}
             </tbody>
           </table>
+          </div>
         )}
 
         {reviewers && (
@@ -189,6 +205,7 @@ export default function AiPage() {
               {' '}<b>{incidents.suspected_release_linked.length}</b> suspected release-linked
             </p>
             {incidents.suspected_release_linked.length > 0 && (
+              <div className="ui-data-table ui-data-table--scroll" role="region" aria-label="Incident alerts linked to releases" tabIndex={0} style={{ maxWidth: '100%', minWidth: 0 }}>
               <table className="grid" style={{ marginBottom: 10 }}>
                 <thead><tr><th>Alert</th><th>Severity</th><th>Server</th><th>Likely from deploy</th></tr></thead>
                 <tbody>
@@ -202,6 +219,7 @@ export default function AiPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
             {incidents.narrative && <p style={{ color: 'var(--muted)' }}>💬 {incidents.narrative}</p>}
           </div>

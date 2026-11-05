@@ -48,16 +48,16 @@ export default function RegenerateKey({ serverId }) {
       </button>
       {open && (
         <div className="modal-backdrop" onClick={close}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal" role="dialog" aria-modal="true" aria-labelledby="regenerate-key-title" onClick={(e) => e.stopPropagation()} style={{ maxHeight: '90vh', overflow: 'auto' }}>
             {!result ? (
               <div>
-                <h3>Regenerate API key?</h3>
+                <h3 id="regenerate-key-title">Regenerate API key?</h3>
                 <p>
                   The current key stops working immediately. Set the new key in{' '}
                   <code>/etc/monitor-agent/agent.yaml</code> on this server and restart the
                   agent, or it will stop reporting.
                 </p>
-                {err && <div className="error">{err}</div>}
+                {err && <p className="error" role="alert">{err}</p>}
                 <div className="modal-actions">
                   <button type="button" onClick={close}>Cancel</button>
                   <button type="button" onClick={regenerate} disabled={busy}>
@@ -67,7 +67,7 @@ export default function RegenerateKey({ serverId }) {
               </div>
             ) : (
               <div>
-                <h3>New API key ✅</h3>
+                <h3 id="regenerate-key-title">New API key</h3>
                 <p>Copy this now — it is shown only once. The old key no longer works.</p>
                 <pre className="apikey">{result.api_key}</pre>
                 <button type="button" className="btn-secondary" onClick={copyKey}>

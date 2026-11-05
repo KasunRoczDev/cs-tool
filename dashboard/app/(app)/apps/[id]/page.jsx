@@ -4,7 +4,7 @@ import SectionHeader from '@/components/SectionHeader';
 import FeedbackState from '@/components/ui/FeedbackState';
 import FormField from '@/components/ui/FormField';
 import FilterBar from '@/components/ui/FilterBar';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { getPageContext } from '@/lib/navigation';
 import { api } from '@/lib/api';
@@ -31,14 +31,14 @@ export default function AppDetailPage() {
   const [msg, setMsg] = useState('');
   const notify = (m) => { setMsg(m); setTimeout(() => setMsg(''), 2500); };
 
-  const loadServers = () => {
+  const loadServers = useCallback(() => {
     setServersLoading(true); setServersError('');
     return api.appServers(id).then(setServers).catch((e) => setServersError(e.message || 'Unable to load linked servers')).finally(() => setServersLoading(false));
-  };
-  const loadApp = () => {
+  }, [id]);
+  const loadApp = useCallback(() => {
     setLoading(true); setLoadError('');
     return api.app(id).then(setApp).catch((e) => setLoadError(e.message || 'Unable to load app')).finally(() => setLoading(false));
-  };
+  }, [id]);
 
   useEffect(() => {
     if (!id) return;
@@ -46,7 +46,7 @@ export default function AppDetailPage() {
     loadServers();
     api.servers().then(setAllServers).catch((e) => setErr(e.message || 'Unable to load available servers'));
     api.channels().then(setChannels).catch((e) => setErr(e.message || 'Unable to load variable scopes'));
-  }, [id]);
+  }, [id, loadApp, loadServers]);
 
   const guard = async (fn, m) => {
     setErr(''); setMsg(''); setSaving(true);

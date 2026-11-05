@@ -1,10 +1,18 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import PageHeader from '@/components/PageHeader';
+import FormField from '@/components/ui/FormField';
+import FeedbackState from '@/components/ui/FeedbackState';
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getPageContext } from '@/lib/navigation';
 import { api } from '@/lib/api';
 
 export default function AccessPage() {
   const [tab, setTab] = useState('roles');
   const [err, setErr] = useState('');
+  const [loadError, setLoadError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [loaded, setLoaded] = useState(false);
   const [msg, setMsg] = useState('');
   const notify = (m) => { setMsg(m); setTimeout(() => setMsg(''), 2500); };
 
@@ -20,14 +28,20 @@ export default function AccessPage() {
   const [members, setMembers] = useState([]);
   const [grant, setGrant] = useState({ user_id: '', role_id: '' });
 
-  const loadRoles = () => Promise.all([api.roles(), api.permissions()])
-    .then(([r, p]) => { setRoles(r); setPerms(p); }).catch((e) => setErr(e.message));
+  const loadRoles = useCallback(async () => {
+    setLoading(true); setLoadError('');
+    const results = await Promise.allSettled([api.roles(), api.permissions()]);
+    if (results[0].status === 'fulfilled') setRoles(results[0].value);
+    if (results[1].status === 'fulfilled') setPerms(results[1].value);
+    setLoadError(results.filter((result) => result.status === 'rejected').map((result) => result.reason?.message || 'Access data could not be loaded').join(' '));
+    setLoaded(true); setLoading(false);
+  }, []);
 
   useEffect(() => {
     loadRoles();
     api.products().then(setProducts).catch(() => {});
     api.users().then(setUsers).catch(() => {});
-  }, []);
+  }, [loadRoles]);
 
   useEffect(() => {
     if (productId) api.productMembers(productId).then(setMembers).catch((e) => setErr(e.message));
@@ -65,8 +79,10 @@ export default function AccessPage() {
 
   return (
     <div>
-      <div className="page-head"><h2>🔐 Access Control</h2></div>
-      {err && <div className="error">{err}</div>}
+      <PageHeader {...getPageContext("/access")} />
+      {tab === 'roles' && loading && <FeedbackState kind="loading" compact title={loaded ? 'Refreshing roles and permissions…' : 'Loading roles and permissions…'} />}
+      {tab === 'roles' && loadError && <FeedbackState kind="error" compact title="Some access data could not be loaded" description={loadError} action={<button onClick={loadRoles} disabled={loading}>Retry</button>} />}
+      {err && <FeedbackState kind="error" compact title="Request failed" description={err} />}
       {msg && <div className="hint">{msg}</div>}
 
       <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '1px solid var(--border)' }}>
@@ -80,8 +96,11 @@ export default function AccessPage() {
       </div>
 
       {tab === 'roles' && (
-        <table className="grid">
-          <thead><tr><th>Role</th><th>Permissions</th><th></th></tr></thead>
+        <>
+        {loaded && !loading && !loadError && roles.length === 0 && <FeedbackState kind="empty" title="No roles available" />}
+        <div className="ui-data-table ui-data-table--scroll" role="region" aria-label="Access table 1" tabIndex={0} style={{ maxWidth: '100%', minWidth: 0 }}>
+<table className="grid">
+          <thead><tr><th>Role</th><th>Permissions</th><th>Actions</th></tr></thead>
           <tbody>
             {roles.map((r) => (
               <tr key={r.id}>
@@ -117,31 +136,34 @@ export default function AccessPage() {
             ))}
           </tbody>
         </table>
+</div>
+        </>
       )}
 
       {tab === 'members' && (
         <div>
           <div className="inline-form" style={{ marginBottom: 12 }}>
-            <select value={productId} onChange={(e) => setProductId(e.target.value)}>
+            <FormField label="Project"><select value={productId} onChange={(e) => setProductId(e.target.value)}>
               <option value="">— select product —</option>
               {products.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            </select></FormField>
           </div>
           {productId && (
             <>
               <div className="inline-form" style={{ marginBottom: 12 }}>
-                <select value={grant.user_id} onChange={(e) => setGrant({ ...grant, user_id: e.target.value })}>
+                <FormField label="User"><select value={grant.user_id} onChange={(e) => setGrant({ ...grant, user_id: e.target.value })}>
                   <option value="">— user —</option>
                   {users.map((u) => <option key={u.id} value={u.id}>{u.email}</option>)}
-                </select>
-                <select value={grant.role_id} onChange={(e) => setGrant({ ...grant, role_id: e.target.value })}>
+                </select></FormField>
+                <FormField label="Role"><select value={grant.role_id} onChange={(e) => setGrant({ ...grant, role_id: e.target.value })}>
                   <option value="">— role —</option>
                   {roles.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
-                </select>
+                </select></FormField>
                 <button onClick={addMember}>Add member</button>
               </div>
-              <table className="grid">
-                <thead><tr><th>User</th><th>Role</th><th>Scope</th><th></th></tr></thead>
+              <div className="ui-data-table ui-data-table--scroll" role="region" aria-label="Access table 2" tabIndex={0} style={{ maxWidth: '100%', minWidth: 0 }}>
+<table className="grid">
+                <thead><tr><th>User</th><th>Role</th><th>Scope</th><th>Actions</th></tr></thead>
                 <tbody>
                   {members.map((m) => (
                     <tr key={m.id}>
@@ -155,6 +177,7 @@ export default function AccessPage() {
                   {members.length === 0 && <tr><td colSpan="4" className="empty">No members.</td></tr>}
                 </tbody>
               </table>
+</div>
             </>
           )}
         </div>
