@@ -318,6 +318,15 @@ label input { margin-top: 4px; }
   border: 1px solid var(--border); border-radius: var(--radius-sm);
 }
 .icon-button:hover:not(:disabled) { color: var(--text); background: var(--panel-2); border-color: var(--muted); filter: none; }
+.shell-layout .passkey-nudge {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md);
+  padding: 10px 16px; margin-bottom: 16px; font-size: 13px;
+}
+.shell-layout .passkey-nudge-actions { display: flex; align-items: center; gap: 10px; }
+.shell-layout .passkey-nudge-link {
+  display: inline-flex; align-items: center; padding: 6px 12px; font-size: 12px; font-weight: 600;
+}
 .overview-page { width: 100%; max-width: 1600px; margin-inline: auto; min-width: 0; }
 .overview-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; margin-bottom: 24px; }
 .overview-header h1 { margin: 0; color: var(--text); font-size: clamp(24px, 2.2vw, 32px); line-height: 1.2; letter-spacing: -.025em; }

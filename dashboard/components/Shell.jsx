@@ -122,6 +122,7 @@ export default function Shell({ children }) {
         { href: '/billing/services', label: 'Services', icon: 'billing' },
         { href: '/billing/service-types', label: 'Service Types', icon: 'billing' },
         { href: '/billing/monthly-entry', label: 'Monthly Entry', icon: 'billing' },
+        { href: '/billing/import', label: 'Import Bill', icon: 'billing' },
         { href: '/billing/history', label: 'Billing History', icon: 'billing' },
         { href: '/billing/report', label: 'Billing Report', icon: 'billing' },
       ],
@@ -224,15 +225,6 @@ export default function Shell({ children }) {
         .shell-layout .mobile-nav-toggle,
         .shell-layout .mobile-nav-close { display: none; }
         .shell-layout .sidebar .badge { margin-left: auto; }
-        .shell-layout .passkey-nudge {
-          display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
-          background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-md);
-          padding: 10px 16px; margin-bottom: 16px; font-size: 13px;
-        }
-        .shell-layout .passkey-nudge-actions { display: flex; align-items: center; gap: 10px; }
-        .shell-layout .passkey-nudge-link {
-          display: inline-flex; align-items: center; padding: 6px 12px; font-size: 12px; font-weight: 600;
-        }
         @media (max-width: 760px) {
           .shell-layout .mobile-nav-header {
             display: flex; align-items: center; justify-content: space-between; gap: 12px;
